@@ -6,11 +6,11 @@ A full-stack authentication system built with **React** and **FastAPI**, providi
 
 ## Overview
 
-This project demonstrates a complete authentication workflow using a modern React frontend and a FastAPI backend.
+This project demonstrates a complete authentication workflow with a modern React frontend and a FastAPI backend.
 
 Users can create an account using their email and password, sign in with Google, and securely recover their password through a time-limited email verification code.
 
-The application uses **SQLite** for data persistence and **SMTP** for sending password-reset emails.
+The application uses SQLite for data persistence and SMTP for sending password-reset emails.
 
 ---
 
@@ -59,7 +59,7 @@ The application uses **SQLite** for data persistence and **SMTP** for sending pa
 ### Frontend
 
 | Technology | Purpose |
-|---|---|
+|------------|---------|
 | React | User interface |
 | Vite | Frontend development and build tooling |
 | JavaScript | Application logic |
@@ -68,7 +68,7 @@ The application uses **SQLite** for data persistence and **SMTP** for sending pa
 ### Backend
 
 | Technology | Purpose |
-|---|---|
+|------------|---------|
 | Python | Backend programming language |
 | FastAPI | REST API framework |
 | SQLAlchemy | Database ORM |
@@ -79,14 +79,42 @@ The application uses **SQLite** for data persistence and **SMTP** for sending pa
 ### Authentication & Services
 
 | Service | Purpose |
-|---|---|
+|---------|---------|
 | Google OAuth | Google authentication |
-| SMTP | Password-reset email delivery |
+| SMTP | Password-reset emails |
 
 ---
-## Project Structure
+
+## Project Architecture
+
+The application follows a simple full-stack architecture:
 
 ```text
+┌─────────────────────────┐
+│     React Frontend      │
+│                         │
+│  Login / Signup / Reset │
+└────────────┬────────────┘
+             │
+             │ HTTP Requests
+             ▼
+┌─────────────────────────┐
+│      FastAPI Backend    │
+│                         │
+│ Authentication API      │
+│ Password Reset API      │
+│ Google Authentication   │
+└────────────┬────────────┘
+             │
+       ┌─────┴─────┐
+       ▼           ▼
+┌────────────┐  ┌──────────────┐
+│   SQLite   │  │ SMTP / Email │
+│  Database  │  │   Service    │
+└────────────┘  └──────────────┘
+
+
+## Project Structure
 Project/
 │
 ├── backend/
@@ -102,40 +130,9 @@ Project/
 │   │   ├── App.jsx
 │   │   ├── App.css
 │   │   └── ...
-│   │
 │   ├── public/
 │   ├── package.json
 │   └── vite.config.js
 │
 ├── .gitignore
 └── README.md
-
- Project Architecture
-
-The application follows a simple full-stack architecture:
-
-
-┌─────────────────────────┐
-│     React Frontend      │
-│                         │
-│  Login / Signup / Reset │
-└────────────┬────────────┘
-             │
-             │ HTTP Requests
-             ▼
-┌─────────────────────────┐
-│     FastAPI Backend     │
-│                         │
-│  Authentication API     │
-│  Password Reset API     │
-│  Google Authentication  │
-└────────────┬────────────┘
-             │
-        ┌────┴─────┐
-        ▼          ▼
-┌────────────┐  ┌──────────────┐
-│   SQLite   │  │ SMTP / Email │
-│  Database  │  │    Service   │
-└────────────┘  └──────────────┘
-
-
