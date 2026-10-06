@@ -65,7 +65,9 @@ def save_refresh_token(
 
 
 @router.post("/signup")
+@limiter.limit("5/minute")
 def signup(
+    request: Request,
     data: SignupRequest,
     db: Session = Depends(get_db),
 ):
@@ -373,7 +375,9 @@ async def forgot_password(
 
 
 @router.post("/reset-password")
+@limiter.limit("5/minute")
 def reset_password(
+    request: Request,
     data: ResetPasswordRequest,
     db: Session = Depends(get_db),
 ):
