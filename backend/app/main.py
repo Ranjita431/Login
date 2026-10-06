@@ -1,3 +1,8 @@
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+from slowapi.util import get_remote_address
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -17,12 +22,18 @@ from app.api.v1.users import router as users_router
 # Import models before creating tables
 Base.metadata.create_all(bind=engine)
 
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
+)
 
 # --------------------------------------------------
 # CORS

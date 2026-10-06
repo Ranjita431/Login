@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta, timezone
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from jose import JWTError
 from sqlalchemy.orm import Session
+
+from app.main import limiter
 
 from app.core.security import (
     create_access_token,
@@ -103,7 +105,9 @@ def signup(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("5/minute")
 def login(
+    request: Request,
     data: LoginRequest,
     db: Session = Depends(get_db),
 ):
