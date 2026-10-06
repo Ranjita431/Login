@@ -1,9 +1,12 @@
-import { useState } from "react";
+
+import { useEffect, useState } from "react";
 import { GoogleOAuthProvider, GoogleLogin } from "@react-oauth/google";
 import "./App.css";
 
 const clientId =
   "484994562541-otpt7tlqq44c1lcacps3qq6bvsua6him.apps.googleusercontent.com";
+
+const API_URL = "http://localhost:8000";
 
 // --------------------------------------------------
 // ICONS
@@ -174,6 +177,172 @@ function App() {
   const [user, setUser] = useState(null);
   const [page, setPage] = useState("login");
 
+  // JWT access token.
+  // The access token is kept in React state for API requests,
+  // and both tokens are persisted in localStorage so refreshes
+  // do not immediately log the user out.
+  const [accessToken, setAccessToken] = useState(
+    () => localStorage.getItem("access_token")
+  );
+
+  const saveTokens = (accessTokenValue, refreshTokenValue) => {
+    localStorage.setItem("access_token", accessTokenValue);
+
+    if (refreshTokenValue) {
+      localStorage.setItem("refresh_token", refreshTokenValue);
+    }
+
+    setAccessToken(accessTokenValue);
+  };
+
+  const clearAuth = () => {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    setAccessToken(null);
+    setUser(null);
+  };
+
+    const refreshAccessToken = async () => {
+    const refreshToken = localStorage.getItem("refresh_token");
+
+    if (!refreshToken) {
+      return null;
+    }
+
+    const response = await fetch(`${API_URL}/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.access_token) {
+      clearAuth();
+      return null;
+    }
+
+    saveTokens(
+      data.access_token,
+      data.refresh_token || refreshToken
+    );
+
+    return data.access_token;
+  };
+
+  // Automatically refresh the access token when it expires.
+  const authenticatedFetch = async (url, options = {}) => {
+    let token =
+      accessToken ||
+      localStorage.getItem("access_token");
+
+    if (!token) {
+      throw new Error("No access token available");
+    }
+
+    const makeRequest = (currentToken) => {
+      const headers = new Headers(options.headers || {});
+
+      headers.set(
+        "Authorization",
+        `Bearer ${currentToken}`
+      );
+
+      return fetch(url, {
+        ...options,
+        headers,
+      });
+    };
+
+    // First request
+    let response = await makeRequest(token);
+
+    // Access token expired → refresh → retry once
+    if (response.status === 401) {
+      const newAccessToken =
+        await refreshAccessToken();
+
+      if (!newAccessToken) {
+        throw new Error(
+          "Your session has expired. Please sign in again."
+        );
+      }
+
+      token = newAccessToken;
+
+      // Retry the original request with the new token
+      response = await makeRequest(token);
+    }
+
+    return response;
+  };
+
+  const loadCurrentUser = async (token = null) => {
+    const currentToken =
+      token ||
+      accessToken ||
+      localStorage.getItem("access_token");
+
+    if (!currentToken) {
+      throw new Error("No access token available");
+    }
+
+    const response = await authenticatedFetch(
+      `${API_URL}/users/me`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${currentToken}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.detail ||
+          "Failed to load user profile"
+      );
+    }
+
+    setUser(data);
+
+    return data;
+  };
+
+  // Restore the authenticated session after a page refresh.
+  useEffect(() => {
+    const restoreSession = async () => {
+      const storedAccessToken = localStorage.getItem("access_token");
+
+      if (storedAccessToken) {
+        try {
+          await loadCurrentUser(storedAccessToken);
+          return;
+        } catch {
+          // Access token may have expired. Try the refresh token below.
+        }
+      }
+
+      const newAccessToken = await refreshAccessToken();
+
+      if (newAccessToken) {
+        try {
+          await loadCurrentUser(newAccessToken);
+        } catch {
+          clearAuth();
+        }
+      }
+    };
+
+    restoreSession();
+  }, []);
+
   // --------------------------------------------------
   // LOGIN / SIGNUP STATE
   // --------------------------------------------------
@@ -215,18 +384,15 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        "http://localhost:8000/auth/google",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            credential: credentialResponse.credential,
-          }),
-        }
-      );
+      const response = await fetch(`${API_URL}/auth/google`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          credential: credentialResponse.credential,
+        }),
+      });
 
       const data = await response.json();
 
@@ -234,7 +400,17 @@ function App() {
         throw new Error(data.detail || "Login failed");
       }
 
-      setUser(data.user);
+      // Preferred response: Google endpoint returns JWT tokens.
+      if (data.access_token) {
+        saveTokens(data.access_token, data.refresh_token);
+        await loadCurrentUser(data.access_token);
+      } else if (data.user) {
+        // Backwards compatibility with the current /auth/google
+        // endpoint, which still returns a user object directly.
+        setUser(data.user);
+      } else {
+        throw new Error("Google login succeeded but no user or access token was returned.");
+      }
     } catch (error) {
       console.error("Login error:", error);
 
@@ -262,19 +438,17 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        "http://localhost:8000/auth/login",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            password,
-          }),
-        }
-      );
+      // Step 1: Login and receive JWT tokens
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
 
       const data = await response.json();
 
@@ -282,12 +456,24 @@ function App() {
         throw new Error(data.detail || "Login failed");
       }
 
-      setUser(data.user);
+      // Make sure the backend returned an access token.
+      if (!data.access_token) {
+        throw new Error("Login succeeded but no access token was returned.");
+      }
+
+      // Persist both JWT tokens.
+      saveTokens(data.access_token, data.refresh_token);
+
+      // Step 2: Use the access token to get the authenticated user.
+      await loadCurrentUser(data.access_token);
 
       setEmail("");
       setPassword("");
     } catch (error) {
       console.error("Login error:", error);
+
+      // If authentication failed, make sure we don't keep bad tokens.
+      clearAuth();
 
       alert(
         error.message ||
@@ -323,20 +509,17 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        "http://localhost:8000/auth/signup",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name,
-            email,
-            password,
-          }),
-        }
-      );
+      const response = await fetch(`${API_URL}/auth/signup`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+        }),
+      });
 
       const data = await response.json();
 
@@ -380,7 +563,7 @@ function App() {
 
     try {
       const response = await fetch(
-        "http://localhost:8000/auth/forgot-password",
+        `${API_URL}/auth/forgot-password`,
         {
           method: "POST",
           headers: {
@@ -400,7 +583,6 @@ function App() {
         );
       }
 
-      // Email has been sent successfully.
       setResetStep(2);
     } catch (error) {
       console.error(
@@ -442,7 +624,7 @@ function App() {
 
     try {
       const response = await fetch(
-        "http://localhost:8000/auth/reset-password",
+        `${API_URL}/auth/reset-password`,
         {
           method: "POST",
           headers: {
@@ -487,10 +669,30 @@ function App() {
   // LOGOUT
   // --------------------------------------------------
 
-  const handleLogout = () => {
-    setUser(null);
+const handleLogout = async () => {
+  const refreshToken = localStorage.getItem("refresh_token");
+
+  try {
+    if (refreshToken) {
+      await fetch(`${API_URL}/auth/logout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          refresh_token: refreshToken,
+        }),
+      });
+    }
+  } catch (error) {
+    console.error("Logout request failed:", error);
+  } finally {
+    // Always clear the local session, even if the
+    // backend request fails.
+    clearAuth();
     setPage("login");
-  };
+  }
+};
 
   // --------------------------------------------------
   // RESET FLOW
@@ -1131,3 +1333,4 @@ export default function AppWithGoogle() {
     </GoogleOAuthProvider>
   );
 }
+
