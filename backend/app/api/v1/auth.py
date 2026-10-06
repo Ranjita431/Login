@@ -5,14 +5,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from jose import JWTError
 from sqlalchemy.orm import Session
 
-from app.main import limiter
+from app.core.limiter import limiter
 
 from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
 )
+
 from app.db import get_db
+
 from app.schemas import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -21,11 +23,13 @@ from app.schemas import (
     SignupRequest,
     TokenResponse,
 )
+
 from app.services.auth_service import (
     authenticate_user,
     create_user,
     get_user_by_email,
 )
+
 from app.models import PasswordReset, RefreshToken
 from app.services.email_service import send_password_reset_email
 
@@ -299,7 +303,9 @@ def logout(
 
 
 @router.post("/forgot-password")
+@limiter.limit("3/minute")
 async def forgot_password(
+    request: Request,
     data: ForgotPasswordRequest,
     db: Session = Depends(get_db),
 ):

@@ -1,16 +1,15 @@
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-
-from slowapi.util import get_remote_address
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from google.oauth2 import id_token
 from google.auth.transport import requests
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.db import SessionLocal, engine
 from app.db.base import Base
 from app.models import User
@@ -22,18 +21,24 @@ from app.api.v1.users import router as users_router
 # Import models before creating tables
 Base.metadata.create_all(bind=engine)
 
-limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
 )
 
+
+# --------------------------------------------------
+# Rate Limiting
+# --------------------------------------------------
+
 app.state.limiter = limiter
+
 app.add_exception_handler(
     RateLimitExceeded,
     _rate_limit_exceeded_handler,
 )
+
 
 # --------------------------------------------------
 # CORS
@@ -43,6 +48,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         settings.frontend_url,
+        "http://localhost:5173",
         "http://localhost:5174",
     ],
     allow_credentials=True,
@@ -83,7 +89,11 @@ def root():
 # --------------------------------------------------
 
 @app.post("/auth/google")
-def google_login(data: GoogleTokenRequest):
+@limiter.limit("5/minute")
+def google_login(
+    request: Request,
+    data: GoogleTokenRequest,
+):
     db = SessionLocal()
 
     try:
@@ -135,10 +145,10 @@ def google_login(data: GoogleTokenRequest):
         refresh_token = create_refresh_token(token_data)
 
         save_refresh_token(
-          db=db,
-          user_id=user.id,
-          refresh_token=refresh_token,
-     )
+            db=db,
+            user_id=user.id,
+            refresh_token=refresh_token,
+        )
 
         return {
             "message": message,
