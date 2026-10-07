@@ -28,6 +28,8 @@ from app.services.auth_service import (
     authenticate_user,
     create_user,
     get_user_by_email,
+    hash_password,
+    verify_password,
 )
 
 from app.models import PasswordReset, RefreshToken
@@ -62,6 +64,19 @@ def save_refresh_token(
     db.commit()
 
     return token_record
+
+
+def cleanup_refresh_tokens(db: Session):
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    db.query(RefreshToken).filter(
+        (RefreshToken.expires_at < now)
+        | (RefreshToken.revoked_at.is_not(None))
+    ).delete(
+        synchronize_session=False
+    )
+
+    db.commit()
 
 
 @router.post("/signup")
@@ -119,6 +134,9 @@ def login(
 ):
     email = data.email.lower().strip()
 
+    # Clean up expired and revoked refresh tokens.
+    cleanup_refresh_tokens(db)
+
     user = authenticate_user(
         db=db,
         email=email,
@@ -161,7 +179,9 @@ def login(
 
 
 @router.post("/refresh", response_model=TokenResponse)
+@limiter.limit("10/minute")
 def refresh_token(
+    request: Request,
     data: RefreshTokenRequest,
     db: Session = Depends(get_db),
 ):
@@ -262,6 +282,7 @@ def refresh_token(
         "token_type": "bearer",
     }
 
+
 @router.post("/logout")
 def logout(
     data: RefreshTokenRequest,
@@ -271,8 +292,6 @@ def logout(
         payload = decode_token(data.refresh_token)
 
     except JWTError:
-        # The token is already invalid/expired.
-        # We can still consider the user logged out.
         return {
             "message": "Logged out successfully"
         }
@@ -337,16 +356,17 @@ async def forgot_password(
         db.delete(reset)
 
     code = str(secrets.randbelow(900000) + 100000)
+    hashed_code = hash_password(code)
 
     expires_at = (
-        datetime.now(timezone.utc)
-        + timedelta(minutes=10)
-    )
+    datetime.now(timezone.utc)
+    + timedelta(minutes=10)
+   )
 
     reset_request = PasswordReset(
-        email=email,
-        token=code,
-        expires_at=expires_at,
+    email=email,
+    token=hashed_code,
+    expires_at=expires_at,
     )
 
     db.add(reset_request)
@@ -396,19 +416,21 @@ def reset_password(
         )
 
     reset_request = (
-        db.query(PasswordReset)
-        .filter(
-            PasswordReset.email == email,
-            PasswordReset.token == data.code,
-        )
-        .first()
+    db.query(PasswordReset)
+    .filter(
+        PasswordReset.email == email,
+    )
+    .first()
     )
 
-    if not reset_request:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid reset code",
-        )
+    if not reset_request or not verify_password(
+    data.code,
+    reset_request.token,
+   ):
+     raise HTTPException(
+        status_code=400,
+        detail="Invalid reset code",
+    )
 
     now = datetime.now(timezone.utc)
 
@@ -434,9 +456,22 @@ def reset_password(
             detail="User not found",
         )
 
-    from app.services.auth_service import hash_password
+    
 
     user.password = hash_password(data.new_password)
+
+    # Revoke all existing refresh tokens for this user.
+    now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == user.id,
+        RefreshToken.revoked_at.is_(None),
+    ).update(
+        {
+            RefreshToken.revoked_at: now_naive
+        },
+        synchronize_session=False,
+    )
 
     # Reset code can only be used once.
     db.delete(reset_request)
