@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from jose import jwt
+import jwt
 
 from app.core.config import settings
 
@@ -32,7 +32,6 @@ def create_refresh_token(data: dict) -> str:
         days=settings.refresh_token_expire_days
     )
 
-    # Give every refresh token a unique identifier.
     payload.update({
         "type": "refresh",
         "jti": str(uuid4()),

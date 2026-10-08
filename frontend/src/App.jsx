@@ -1,5 +1,5 @@
-
 import { useEffect, useState } from "react";
+import VerifyEmail from "./pages/VerifyEmail";
 import { GoogleOAuthProvider, GoogleLogin } from "@react-oauth/google";
 import "./App.css";
 
@@ -170,6 +170,9 @@ function AuthCard({ children, className = "" }) {
 // --------------------------------------------------
 
 function App() {
+    if (window.location.pathname === "/verify-email") {
+    return <VerifyEmail />;
+  }
   // --------------------------------------------------
   // GENERAL STATE
   // --------------------------------------------------

@@ -1,8 +1,11 @@
+from uuid import UUID
 from datetime import datetime, timedelta, timezone
 import secrets
 
+from app.models.email_verification import EmailVerification
+
 from fastapi import APIRouter, Depends, HTTPException, Request
-from jose import JWTError
+from jwt.exceptions import PyJWTError
 from sqlalchemy.orm import Session
 
 from app.core.limiter import limiter
@@ -33,7 +36,10 @@ from app.services.auth_service import (
 )
 
 from app.models import PasswordReset, RefreshToken
-from app.services.email_service import send_password_reset_email
+from app.services.email_service import (
+    send_password_reset_email,
+    send_email_verification_email,
+)
 
 
 router = APIRouter(
@@ -44,7 +50,7 @@ router = APIRouter(
 
 def save_refresh_token(
     db: Session,
-    user_id: int,
+    user_id: UUID,
     refresh_token: str,
 ):
     payload = decode_token(refresh_token)
@@ -81,7 +87,7 @@ def cleanup_refresh_tokens(db: Session):
 
 @router.post("/signup")
 @limiter.limit("5/minute")
-def signup(
+async def signup(
     request: Request,
     data: SignupRequest,
     db: Session = Depends(get_db),
@@ -115,6 +121,36 @@ def signup(
         password=data.password,
     )
 
+    # Create a 15-minute email verification token.
+    verification_token = secrets.token_urlsafe(32)
+
+    verification = EmailVerification(
+        email=user.email,
+        token=verification_token,
+        expires_at=datetime.utcnow() + timedelta(minutes=15),
+    )
+
+    db.add(verification)
+    db.commit()
+
+    try:
+        await send_email_verification_email(
+            recipient_email=user.email,
+            verification_token=verification_token,
+        )
+    except Exception as email_error:
+        # Do not leave an unusable verification record behind
+        # when the email could not be sent.
+        db.delete(verification)
+        db.commit()
+
+        print(f"Email verification sending failed: {email_error}")
+
+        raise HTTPException(
+            status_code=500,
+            detail="Could not send verification email",
+        )
+
     return {
         "message": "Account created successfully!",
         "user": {
@@ -124,6 +160,73 @@ def signup(
         },
     }
 
+
+@router.get("/verify-email")
+def verify_email(
+    token: str,
+    email: str,
+    db: Session = Depends(get_db),
+):
+    email = email.lower().strip()
+
+    verification = (
+        db.query(EmailVerification)
+        .filter(
+            EmailVerification.email == email,
+            EmailVerification.token == token,
+        )
+        .first()
+    )
+
+    if not verification:
+        user = get_user_by_email(db, email)
+
+        # The verification request may have been sent twice.
+        # If the first request already verified the account,
+        # treat the second request as successful too.
+        if user and user.is_email_verified:
+            return {
+                "message": "Email verified successfully",
+            }
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid verification token",
+        )
+
+    expires_at = verification.expires_at
+
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if datetime.now(timezone.utc) > expires_at:
+        db.delete(verification)
+        db.commit()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Verification token has expired",
+        )
+
+    user = get_user_by_email(db, email)
+
+    if not user:
+        db.delete(verification)
+        db.commit()
+
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    user.is_email_verified = True
+
+    db.delete(verification)
+    db.commit()
+
+    return {
+        "message": "Email verified successfully",
+    }
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
@@ -185,11 +288,12 @@ def refresh_token(
     data: RefreshTokenRequest,
     db: Session = Depends(get_db),
 ):
+    cleanup_refresh_tokens(db)
     # Decode and validate the JWT.
     try:
         payload = decode_token(data.refresh_token)
 
-    except JWTError:
+    except PyJWTError:
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired refresh token",
@@ -272,7 +376,7 @@ def refresh_token(
     # Store the new refresh token.
     save_refresh_token(
         db=db,
-        user_id=int(user_id),
+        user_id=UUID(user_id),
         refresh_token=new_refresh_token,
     )
 
@@ -291,7 +395,7 @@ def logout(
     try:
         payload = decode_token(data.refresh_token)
 
-    except JWTError:
+    except PyJWTError:
         return {
             "message": "Logged out successfully"
         }

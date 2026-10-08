@@ -1,6 +1,7 @@
+from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError
+from jwt.exceptions import PyJWTError
 from sqlalchemy.orm import Session
 
 from app.core.security import decode_token
@@ -20,7 +21,7 @@ def get_current_user(
     try:
         payload = decode_token(token)
 
-    except JWTError:
+    except PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired access token",
@@ -44,11 +45,11 @@ def get_current_user(
         )
 
     try:
-        user_id = int(user_id)
+        user_id = UUID(user_id)
     except (TypeError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid access token",
+            detail="Invalid user ID",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

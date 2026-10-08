@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Uuid
 
 from app.db.base import Base
 
@@ -11,7 +11,7 @@ class RefreshToken(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     user_id = Column(
-        Integer,
+        Uuid(as_uuid=True),
         ForeignKey("users.id"),
         nullable=False,
         index=True,
