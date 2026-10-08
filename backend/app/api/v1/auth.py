@@ -2,9 +2,11 @@ from uuid import UUID
 from datetime import datetime, timedelta, timezone
 import secrets
 
+from app.core.config import settings
+
 from app.models.email_verification import EmailVerification
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from jwt.exceptions import PyJWTError
 from sqlalchemy.orm import Session
 
@@ -232,6 +234,7 @@ def verify_email(
 @limiter.limit("5/minute")
 def login(
     request: Request,
+    response: Response,
     data: LoginRequest,
     db: Session = Depends(get_db),
 ):
@@ -274,11 +277,31 @@ def login(
         refresh_token=refresh_token,
     )
 
+    response.set_cookie(
+      key=settings.access_token_cookie_name,
+      value=access_token,
+      httponly=True,
+      secure=settings.cookie_secure,
+      samesite=settings.cookie_samesite,
+      path="/",
+      max_age=settings.access_token_expire_minutes * 60,
+)
+
+    response.set_cookie(
+      key=settings.refresh_token_cookie_name,
+      value=refresh_token,
+      httponly=True,
+      secure=settings.cookie_secure,
+      samesite=settings.cookie_samesite,
+      path="/",
+      max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+)
+
     return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-    }
+    "access_token": access_token,
+    "refresh_token": refresh_token,
+    "token_type": "bearer",
+}
 
 
 @router.post("/refresh", response_model=TokenResponse)

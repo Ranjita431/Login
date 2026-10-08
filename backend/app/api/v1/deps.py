@@ -4,6 +4,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jwt.exceptions import PyJWTError
 from sqlalchemy.orm import Session
 
+from fastapi import Cookie
+
 from app.core.security import decode_token
 from app.db import get_db
 from app.models import User
@@ -14,10 +16,20 @@ security = HTTPBearer()
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
+    access_token: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
 ):
-    token = credentials.credentials
+    token = access_token
 
+    if not token and credentials:
+        token = credentials.credentials
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     try:
         payload = decode_token(token)
 

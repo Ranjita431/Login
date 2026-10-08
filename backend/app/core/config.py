@@ -18,7 +18,16 @@ class Settings(BaseSettings):
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
+    access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
+
+    access_token_cookie_name: str = "access_token"
+    refresh_token_cookie_name: str = "refresh_token"
+
+    cookie_secure: bool = False
+    cookie_samesite: str = "lax"
+
+
 
     # Frontend
     frontend_url: str = "http://localhost:5173"
