@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import VerifyEmail from "./pages/VerifyEmail";
 import { GoogleOAuthProvider, GoogleLogin } from "@react-oauth/google";
 import "./App.css";
@@ -130,7 +130,7 @@ function BrandPanel({ mode = "login" }) {
     <div className="brand-panel">
       <div className="brand">
         <div className="brand-mark">
-          <span>✦</span>
+          <span>âœ¦</span>
         </div>
 
         <div>
@@ -170,182 +170,90 @@ function AuthCard({ children, className = "" }) {
 // --------------------------------------------------
 
 function App() {
-    if (window.location.pathname === "/verify-email") {
-    return <VerifyEmail />;
-  }
-  // --------------------------------------------------
-  // GENERAL STATE
-  // --------------------------------------------------
+  const isVerifyEmailPage = window.location.pathname === "/verify-email";
 
   const [user, setUser] = useState(null);
   const [page, setPage] = useState("login");
 
-  // JWT access token.
-  // The access token is kept in React state for API requests,
-  // and both tokens are persisted in localStorage so refreshes
-  // do not immediately log the user out.
-  const [accessToken, setAccessToken] = useState(
-    () => localStorage.getItem("access_token")
-  );
-
-  const saveTokens = (accessTokenValue, refreshTokenValue) => {
-    localStorage.setItem("access_token", accessTokenValue);
-
-    if (refreshTokenValue) {
-      localStorage.setItem("refresh_token", refreshTokenValue);
-    }
-
-    setAccessToken(accessTokenValue);
-  };
-
-  const clearAuth = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    setAccessToken(null);
-    setUser(null);
-  };
-
-    const refreshAccessToken = async () => {
-    const refreshToken = localStorage.getItem("refresh_token");
-
-    if (!refreshToken) {
-      return null;
-    }
-
-    const response = await fetch(`${API_URL}/auth/refresh`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        refresh_token: refreshToken,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.access_token) {
-      clearAuth();
-      return null;
-    }
-
-    saveTokens(
-      data.access_token,
-      data.refresh_token || refreshToken
-    );
-
-    return data.access_token;
-  };
-
-  // Automatically refresh the access token when it expires.
-  const authenticatedFetch = async (url, options = {}) => {
-    let token =
-      accessToken ||
-      localStorage.getItem("access_token");
-
-    if (!token) {
-      throw new Error("No access token available");
-    }
-
-    const makeRequest = (currentToken) => {
-      const headers = new Headers(options.headers || {});
-
-      headers.set(
-        "Authorization",
-        `Bearer ${currentToken}`
-      );
-
-      return fetch(url, {
-        ...options,
-        headers,
+  // Authentication uses HttpOnly cookies, not localStorage.
+  const clearAuth = async () => {
+    try {
+      await fetch(`${API_URL}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
       });
-    };
+    } catch (error) {
+      console.error("Logout request failed:", error);
+    } finally {
+      setUser(null);
+    }
+  };
 
-    // First request
-    let response = await makeRequest(token);
+  const refreshAccessToken = async () => {
+    try {
+      const response = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
 
-    // Access token expired → refresh → retry once
+      return response.ok;
+    } catch (error) {
+      console.error("Session refresh failed:", error);
+      return false;
+    }
+  };
+
+  const authenticatedFetch = async (url, options = {}) => {
+    const makeRequest = () =>
+      fetch(url, {
+        ...options,
+        credentials: "include",
+        headers: new Headers(options.headers || {}),
+      });
+
+    let response = await makeRequest();
+
     if (response.status === 401) {
-      const newAccessToken =
-        await refreshAccessToken();
+      const refreshed = await refreshAccessToken();
 
-      if (!newAccessToken) {
-        throw new Error(
-          "Your session has expired. Please sign in again."
-        );
+      if (!refreshed) {
+        throw new Error("Your session has expired. Please sign in again.");
       }
 
-      token = newAccessToken;
-
-      // Retry the original request with the new token
-      response = await makeRequest(token);
+      response = await makeRequest();
     }
 
     return response;
   };
 
-  const loadCurrentUser = async (token = null) => {
-    const currentToken =
-      token ||
-      accessToken ||
-      localStorage.getItem("access_token");
-
-    if (!currentToken) {
-      throw new Error("No access token available");
-    }
-
-    const response = await authenticatedFetch(
-      `${API_URL}/users/me`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${currentToken}`,
-        },
-      }
-    );
+  const loadCurrentUser = async () => {
+    const response = await authenticatedFetch(`${API_URL}/users/me`, {
+      method: "GET",
+    });
 
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(
-        data.detail ||
-          "Failed to load user profile"
-      );
+      throw new Error(data.detail || "Failed to load user profile");
     }
 
     setUser(data);
-
     return data;
   };
 
-  // Restore the authenticated session after a page refresh.
   useEffect(() => {
+    if (isVerifyEmailPage) return;
+
     const restoreSession = async () => {
-      const storedAccessToken = localStorage.getItem("access_token");
-
-      if (storedAccessToken) {
-        try {
-          await loadCurrentUser(storedAccessToken);
-          return;
-        } catch {
-          // Access token may have expired. Try the refresh token below.
-        }
-      }
-
-      const newAccessToken = await refreshAccessToken();
-
-      if (newAccessToken) {
-        try {
-          await loadCurrentUser(newAccessToken);
-        } catch {
-          clearAuth();
-        }
+      try {
+        await loadCurrentUser();
+      } catch {
+        setUser(null);
       }
     };
 
     restoreSession();
   }, []);
-
   // --------------------------------------------------
   // LOGIN / SIGNUP STATE
   // --------------------------------------------------
@@ -401,33 +309,22 @@ function App() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || "Login failed");
+        throw new Error(data.detail || "Google login failed");
       }
 
-      // Preferred response: Google endpoint returns JWT tokens.
-      if (data.access_token) {
-        saveTokens(data.access_token, data.refresh_token);
-        await loadCurrentUser(data.access_token);
-      } else if (data.user) {
-        // Backwards compatibility with the current /auth/google
-        // endpoint, which still returns a user object directly.
-        setUser(data.user);
-      } else {
-        throw new Error("Google login succeeded but no user or access token was returned.");
-      }
+      // The backend should set authentication cookies.
+      // Load the current user using the cookie automatically.
+      await loadCurrentUser();
+
+      setEmail("");
+      setPassword("");
     } catch (error) {
-      console.error("Login error:", error);
-
-      alert(
-        error.message ||
-          "Google login failed. Please try again."
-      );
+      console.error("Google login error:", error);
+      alert(error.message || "Google login failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
-
-  // --------------------------------------------------
   // EMAIL LOGIN
   // --------------------------------------------------
 
@@ -442,7 +339,6 @@ function App() {
     setLoading(true);
 
     try {
-      // Step 1: Login and receive JWT tokens
       const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: {
@@ -461,35 +357,19 @@ function App() {
         throw new Error(data.detail || "Login failed");
       }
 
-      // Make sure the backend returned an access token.
-      if (!data.access_token) {
-        throw new Error("Login succeeded but no access token was returned.");
-      }
-
-      // Persist both JWT tokens.
-      saveTokens(data.access_token, data.refresh_token);
-
-      // Step 2: Use the access token to get the authenticated user.
-      await loadCurrentUser(data.access_token);
+      // The backend sets HttpOnly cookies.
+      // Fetch the user profile using the browser's cookies.
+      await loadCurrentUser();
 
       setEmail("");
       setPassword("");
     } catch (error) {
-      console.error("Login error:", error);
-
-      // If authentication failed, make sure we don't keep bad tokens.
-      clearAuth();
-
-      alert(
-        error.message ||
-          "Something went wrong. Please try again."
-      );
+      console.error("Email login error:", error);
+      alert(error.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
-
-  // --------------------------------------------------
   // SIGN UP
   // --------------------------------------------------
 
@@ -532,7 +412,7 @@ function App() {
         throw new Error(data.detail || "Signup failed");
       }
 
-      alert("Account created successfully! 🎉");
+      alert("Account created successfully! ðŸŽ‰");
 
       setName("");
       setEmail("");
@@ -674,32 +554,10 @@ function App() {
   // LOGOUT
   // --------------------------------------------------
 
-const handleLogout = async () => {
-  const refreshToken = localStorage.getItem("refresh_token");
-
-  try {
-    if (refreshToken) {
-      await fetch(`${API_URL}/auth/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          refresh_token: refreshToken,
-        }),
-      });
-    }
-  } catch (error) {
-    console.error("Logout request failed:", error);
-  } finally {
-    // Always clear the local session, even if the
-    // backend request fails.
-    clearAuth();
+    const handleLogout = async () => {
+    await clearAuth();
     setPage("login");
-  }
-};
-
-  // --------------------------------------------------
+  };
   // RESET FLOW
   // --------------------------------------------------
 
@@ -772,7 +630,7 @@ const handleLogout = async () => {
   // --------------------------------------------------
 
   if (page === "forgot-password") {
-    // STEP 1 — EMAIL
+    // STEP 1 â€” EMAIL
     if (resetStep === 1) {
       return (
         <div className="app-page">
@@ -826,7 +684,7 @@ const handleLogout = async () => {
                 className="back-link"
                 onClick={backToLogin}
               >
-                ← Back to login
+                â† Back to login
               </button>
             </AuthCard>
           </div>
@@ -834,7 +692,7 @@ const handleLogout = async () => {
       );
     }
 
-    // STEP 2 — EMAIL SENT
+    // STEP 2 â€” EMAIL SENT
     if (resetStep === 2) {
       return (
         <div className="app-page">
@@ -880,7 +738,7 @@ const handleLogout = async () => {
                 className="back-link"
                 onClick={backToLogin}
               >
-                ← Back to login
+                â† Back to login
               </button>
             </AuthCard>
           </div>
@@ -888,7 +746,7 @@ const handleLogout = async () => {
       );
     }
 
-    // STEP 3 — RESET PASSWORD
+    // STEP 3 â€” RESET PASSWORD
     if (resetStep === 3) {
       return (
         <div className="app-page">
@@ -992,7 +850,7 @@ const handleLogout = async () => {
                 className="back-link"
                 onClick={() => setResetStep(2)}
               >
-                ← Back
+                â† Back
               </button>
             </AuthCard>
           </div>
@@ -1000,7 +858,7 @@ const handleLogout = async () => {
       );
     }
 
-    // STEP 4 — SUCCESS
+    // STEP 4 â€” SUCCESS
     return (
       <div className="app-page success-page">
         <div className="auth-layout single-state">
@@ -1338,4 +1196,9 @@ export default function AppWithGoogle() {
     </GoogleOAuthProvider>
   );
 }
+
+
+
+
+
 

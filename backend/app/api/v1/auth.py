@@ -6,7 +6,7 @@ from app.core.config import settings
 
 from app.models.email_verification import EmailVerification
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from jwt.exceptions import PyJWTError
 from sqlalchemy.orm import Session
 
@@ -304,25 +304,41 @@ def login(
 }
 
 
+
 @router.post("/refresh", response_model=TokenResponse)
 @limiter.limit("10/minute")
 def refresh_token(
     request: Request,
-    data: RefreshTokenRequest,
+    response: Response,
+    refresh_token_cookie: str | None = Cookie(
+        default=None,
+        alias=settings.refresh_token_cookie_name,
+    ),
+    data: RefreshTokenRequest | None = None,
     db: Session = Depends(get_db),
 ):
     cleanup_refresh_tokens(db)
-    # Decode and validate the JWT.
-    try:
-        payload = decode_token(data.refresh_token)
 
+    # Support both the HttpOnly cookie and the old JSON body.
+    token = refresh_token_cookie or (
+        data.refresh_token if data is not None else None
+    )
+
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token missing",
+        )
+
+    try:
+        payload = decode_token(token)
     except PyJWTError:
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired refresh token",
         )
 
-    # Make sure this is actually a refresh token.
+    # Confirm that this is a refresh token.
     if payload.get("type") != "refresh":
         raise HTTPException(
             status_code=401,
@@ -332,11 +348,18 @@ def refresh_token(
     user_id = payload.get("sub")
     token_id = payload.get("jti")
 
-    # Both the user ID and JWT ID are required.
     if not user_id or not token_id:
         raise HTTPException(
             status_code=401,
             detail="Invalid refresh token",
+        )
+
+    try:
+        user_uuid = UUID(user_id)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid user ID in token",
         )
 
     # Find the refresh token in the database.
@@ -346,13 +369,12 @@ def refresh_token(
         .first()
     )
 
-    if not stored_token:
+    if not stored_token or stored_token.user_id != user_uuid:
         raise HTTPException(
             status_code=401,
-            detail="Refresh token has been revoked or is invalid",
+            detail="Refresh token is invalid or revoked",
         )
 
-    # Prevent reuse of an already-rotated refresh token.
     if stored_token.revoked_at is not None:
         raise HTTPException(
             status_code=401,
@@ -361,18 +383,13 @@ def refresh_token(
 
     # Check database expiration.
     now = datetime.now(timezone.utc)
-
     expires_at = stored_token.expires_at
 
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
 
     if now > expires_at:
-        stored_token.revoked_at = (
-            datetime.now(timezone.utc)
-            .replace(tzinfo=None)
-        )
-
+        stored_token.revoked_at = now.replace(tzinfo=None)
         db.commit()
 
         raise HTTPException(
@@ -381,74 +398,118 @@ def refresh_token(
         )
 
     # Revoke the old refresh token.
-    stored_token.revoked_at = (
-        datetime.now(timezone.utc)
-        .replace(tzinfo=None)
-    )
+    stored_token.revoked_at = now.replace(tzinfo=None)
+    db.commit()
 
-    # Create a new access token.
-    access_token = create_access_token(
-        {"sub": user_id}
+    # Generate new tokens.
+    new_access_token = create_access_token(
+        {"sub": str(user_uuid)}
     )
-
-    # Create a completely new refresh token.
     new_refresh_token = create_refresh_token(
-        {"sub": user_id}
+        {"sub": str(user_uuid)}
     )
 
-    # Store the new refresh token.
+    # Save the new refresh token in the database.
     save_refresh_token(
         db=db,
-        user_id=UUID(user_id),
+        user_id=user_uuid,
         refresh_token=new_refresh_token,
     )
 
+    # Replace the HttpOnly cookies.
+    response.set_cookie(
+        key=settings.access_token_cookie_name,
+        value=new_access_token,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+        path="/",
+        max_age=settings.access_token_expire_minutes * 60,
+    )
+
+    response.set_cookie(
+        key=settings.refresh_token_cookie_name,
+        value=new_refresh_token,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+        path="/",
+        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+    )
+
+    # Keep the JSON response for compatibility with existing clients.
     return {
-        "access_token": access_token,
+        "access_token": new_access_token,
         "refresh_token": new_refresh_token,
         "token_type": "bearer",
     }
 
 
+
 @router.post("/logout")
 def logout(
-    data: RefreshTokenRequest,
+    response: Response,
+    refresh_token_cookie: str | None = Cookie(
+        default=None,
+        alias=settings.refresh_token_cookie_name,
+    ),
+    data: RefreshTokenRequest | None = None,
     db: Session = Depends(get_db),
 ):
-    try:
-        payload = decode_token(data.refresh_token)
+    # Support cookie-based logout and the old JSON body.
+    token = refresh_token_cookie or (
+        data.refresh_token if data is not None else None
+    )
 
-    except PyJWTError:
-        return {
-            "message": "Logged out successfully"
-        }
+    if token:
+        try:
+            payload = decode_token(token)
 
-    if payload.get("type") != "refresh":
-        return {
-            "message": "Logged out successfully"
-        }
+            if payload.get("type") == "refresh":
+                token_id = payload.get("jti")
 
-    token_id = payload.get("jti")
+                if token_id:
+                    stored_token = (
+                        db.query(RefreshToken)
+                        .filter(
+                            RefreshToken.token_id == token_id
+                        )
+                        .first()
+                    )
 
-    if token_id:
-        stored_token = (
-            db.query(RefreshToken)
-            .filter(RefreshToken.token_id == token_id)
-            .first()
-        )
+                    if (
+                        stored_token
+                        and stored_token.revoked_at is None
+                    ):
+                        stored_token.revoked_at = (
+                            datetime.now(timezone.utc)
+                            .replace(tzinfo=None)
+                        )
+                        db.commit()
 
-        if stored_token and stored_token.revoked_at is None:
-            stored_token.revoked_at = (
-                datetime.now(timezone.utc)
-                .replace(tzinfo=None)
-            )
+        except PyJWTError:
+            # The session can still be cleared if the token
+            # is expired or invalid.
+            pass
 
-            db.commit()
+    # Remove both authentication cookies.
+    response.delete_cookie(
+        key=settings.access_token_cookie_name,
+        path="/",
+        secure=settings.cookie_secure,
+        httponly=True,
+        samesite=settings.cookie_samesite,
+    )
 
-    return {
-        "message": "Logged out successfully"
-    }
+    response.delete_cookie(
+        key=settings.refresh_token_cookie_name,
+        path="/",
+        secure=settings.cookie_secure,
+        httponly=True,
+        samesite=settings.cookie_samesite,
+    )
 
+    return {"message": "Logged out successfully"}
 
 @router.post("/forgot-password")
 @limiter.limit("3/minute")
