@@ -2,8 +2,18 @@ from uuid import UUID
 from datetime import datetime, timedelta, timezone
 import secrets
 
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 from app.core.config import settings
-from app.datamodels.auth import MessageResponse
+
+from app.datamodels.auth import (
+    MessageResponse,
+    SignupResponse,
+    UserResponse,
+)
 
 from app.models.email_verification import EmailVerification
 
@@ -21,13 +31,15 @@ from app.core.security import (
 
 from app.db import get_db
 
-from app.schemas import (
+from app.datamodels.auth import (
     ForgotPasswordRequest,
     LoginRequest,
+    MessageResponse,
     RefreshTokenRequest,
     ResetPasswordRequest,
     SignupRequest,
-    TokenResponse,
+    SignupResponse,
+    UserResponse,
 )
 
 from app.services.auth_service import (
@@ -85,7 +97,7 @@ def cleanup_refresh_tokens(db: Session):
     db.commit()
 
 
-@router.post("/signup")
+@router.post("/signup", response_model=SignupResponse)
 @limiter.limit("5/minute")
 async def signup(
     request: Request,
@@ -144,7 +156,7 @@ async def signup(
         db.delete(verification)
         db.commit()
 
-        print(f"Email verification sending failed: {email_error}")
+        logger.exception("Email verification sending failed")
 
         raise HTTPException(
             status_code=500,
@@ -161,7 +173,7 @@ async def signup(
     }
 
 
-@router.get("/verify-email")
+@router.get("/verify-email", response_model=MessageResponse)
 def verify_email(
     token: str,
     email: str,
@@ -436,7 +448,7 @@ def refresh_token(
 
 
 
-@router.post("/logout")
+@router.post("/logout", response_model=MessageResponse)
 def logout(
     response: Response,
     refresh_token_cookie: str | None = Cookie(
@@ -501,7 +513,7 @@ def logout(
 
     return {"message": "Logged out successfully"}
 
-@router.post("/forgot-password")
+@router.post("/forgot-password", response_model=MessageResponse)
 @limiter.limit("3/minute")
 async def forgot_password(
     request: Request,
@@ -560,7 +572,8 @@ async def forgot_password(
         db.delete(reset_request)
         db.commit()
 
-        print(f"Email sending failed: {email_error}")
+        logger.exception("Email sending failed")
+
 
         raise HTTPException(
             status_code=500,
@@ -572,7 +585,7 @@ async def forgot_password(
     }
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", response_model=MessageResponse)
 @limiter.limit("5/minute")
 def reset_password(
     request: Request,

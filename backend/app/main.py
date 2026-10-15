@@ -1,6 +1,5 @@
 ﻿from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -16,7 +15,11 @@ from app.models import User
 from app.core.security import create_access_token, create_refresh_token
 from app.api.v1.auth import router as auth_router, save_refresh_token
 from app.api.v1.users import router as users_router
-
+from app.datamodels.auth import (
+    GoogleLoginResponse,
+    GoogleTokenRequest,
+    MessageResponse,
+)
 
 # Import models before creating tables
 Base.metadata.create_all(bind=engine)
@@ -58,14 +61,6 @@ app.add_middleware(
 
 
 # --------------------------------------------------
-# Request Models
-# --------------------------------------------------
-
-class GoogleTokenRequest(BaseModel):
-    credential: str
-
-
-# --------------------------------------------------
 # Routers
 # --------------------------------------------------
 
@@ -77,7 +72,7 @@ app.include_router(users_router)
 # Root route
 # --------------------------------------------------
 
-@app.get("/")
+@app.get("/", response_model=MessageResponse)
 def root():
     return {
         "message": "FastAPI backend is running!"
@@ -88,7 +83,7 @@ def root():
 # Google Login
 # --------------------------------------------------
 
-@app.post("/auth/google")
+@app.post("/auth/google", response_model=GoogleLoginResponse)
 @limiter.limit("5/minute")
 def google_login(
     request: Request,
