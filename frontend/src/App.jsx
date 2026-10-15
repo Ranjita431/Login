@@ -1,12 +1,16 @@
-﻿import { useEffect, useState } from "react";
+﻿
+import { useEffect, useState } from "react";
 import VerifyEmail from "./pages/VerifyEmail";
-import { GoogleOAuthProvider, GoogleLogin } from "@react-oauth/google";
+import {
+  GoogleOAuthProvider,
+  GoogleLogin,
+} from "@react-oauth/google";
 import "./App.css";
+import API_URL from "./services/api";
+import { login, signup, googleLogin } from "./services/auth";
 
 const clientId =
   "484994562541-otpt7tlqq44c1lcacps3qq6bvsua6him.apps.googleusercontent.com";
-
-const API_URL = "http://localhost:8000";
 
 // --------------------------------------------------
 // ICONS
@@ -14,11 +18,7 @@ const API_URL = "http://localhost:8000";
 
 function LockIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="field-icon"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="field-icon" aria-hidden="true">
       <rect x="5" y="10" width="14" height="10" rx="2" />
       <path d="M8 10V7a4 4 0 0 1 8 0v3" />
     </svg>
@@ -27,11 +27,7 @@ function LockIcon() {
 
 function MailIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="field-icon"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="field-icon" aria-hidden="true">
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <path d="m3 7 9 6 9-6" />
     </svg>
@@ -40,11 +36,7 @@ function MailIcon() {
 
 function UserIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="field-icon"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="field-icon" aria-hidden="true">
       <circle cx="12" cy="8" r="3.5" />
       <path d="M5 20c.8-3.5 3.1-5.5 7-5.5s6.2 2 7 5.5" />
     </svg>
@@ -53,11 +45,7 @@ function UserIcon() {
 
 function EyeIcon({ hidden = false }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="eye-icon"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="eye-icon" aria-hidden="true">
       {hidden ? (
         <>
           <path d="M3 3l18 18" />
@@ -77,11 +65,7 @@ function EyeIcon({ hidden = false }) {
 
 function CheckIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="success-check"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="success-check" aria-hidden="true">
       <path d="m7 12 3.2 3.2L17.5 8" />
     </svg>
   );
@@ -89,11 +73,7 @@ function CheckIcon() {
 
 function MailLargeIcon() {
   return (
-    <svg
-      viewBox="0 0 64 64"
-      className="mail-large-icon"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 64 64" className="mail-large-icon" aria-hidden="true">
       <rect x="8" y="14" width="48" height="36" rx="7" />
       <path d="m10 18 22 18 22-18" />
     </svg>
@@ -130,7 +110,7 @@ function BrandPanel({ mode = "login" }) {
     <div className="brand-panel">
       <div className="brand">
         <div className="brand-mark">
-          <span>âœ¦</span>
+          <span>✦</span>
         </div>
 
         <div>
@@ -158,11 +138,7 @@ function BrandPanel({ mode = "login" }) {
 // --------------------------------------------------
 
 function AuthCard({ children, className = "" }) {
-  return (
-    <div className={`auth-card ${className}`}>
-      {children}
-    </div>
-  );
+  return <div className={`auth-card ${className}`}>{children}</div>;
 }
 
 // --------------------------------------------------
@@ -170,7 +146,8 @@ function AuthCard({ children, className = "" }) {
 // --------------------------------------------------
 
 function App() {
-  const isVerifyEmailPage = window.location.pathname === "/verify-email";
+  const isVerifyEmailPage =
+    window.location.pathname === "/verify-email";
 
   const [user, setUser] = useState(null);
   const [page, setPage] = useState("login");
@@ -217,7 +194,9 @@ function App() {
       const refreshed = await refreshAccessToken();
 
       if (!refreshed) {
-        throw new Error("Your session has expired. Please sign in again.");
+        throw new Error(
+          "Your session has expired. Please sign in again."
+        );
       }
 
       response = await makeRequest();
@@ -254,20 +233,18 @@ function App() {
 
     restoreSession();
   }, []);
+
   // --------------------------------------------------
   // LOGIN / SIGNUP STATE
   // --------------------------------------------------
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [name, setName] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] =
-    useState(false);
-
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // --------------------------------------------------
@@ -283,49 +260,38 @@ function App() {
   // 3 = enter reset code + new password
   // 4 = success
   const [resetStep, setResetStep] = useState(1);
-
-  const [showNewPassword, setShowNewPassword] =
-    useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   // --------------------------------------------------
   // GOOGLE LOGIN
   // --------------------------------------------------
 
-  const handleGoogleLogin = async (credentialResponse) => {
-    setLoading(true);
+const handleGoogleLogin = async (credentialResponse) => {
+  setLoading(true);
 
-    try {
-      const response = await fetch(`${API_URL}/auth/google`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          credential: credentialResponse.credential,
-        }),
-      });
+  try {
+    const response = await googleLogin(credentialResponse.credential);
+    const data = await response.json();
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Google login failed");
-      }
-
-      // The backend should set authentication cookies.
-      // Load the current user using the cookie automatically.
-      await loadCurrentUser();
-
-      setEmail("");
-      setPassword("");
-    } catch (error) {
-      console.error("Google login error:", error);
-      alert(error.message || "Google login failed. Please try again.");
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      throw new Error(data.detail || "Google login failed");
     }
-  };
-  // EMAIL LOGIN
+
+    await loadCurrentUser();
+    setEmail("");
+    setPassword("");
+  } catch (error) {
+    console.error("Google login error:", error);
+    alert(error.message || "Google login failed. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
+  // --------------------------------------------------
+  // EMAIL LOGIN — USING AUTH SERVICE
   // --------------------------------------------------
 
   const handleEmailLogin = async (e) => {
@@ -339,26 +305,13 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          email,
-          password,
-        }),
-      });
-
+      const response = await login(email, password);
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.detail || "Login failed");
       }
 
-      // The backend sets HttpOnly cookies.
-      // Fetch the user profile using the browser's cookies.
       await loadCurrentUser();
 
       setEmail("");
@@ -370,7 +323,9 @@ function App() {
       setLoading(false);
     }
   };
-  // SIGN UP
+
+  // --------------------------------------------------
+  // SIGNUP — USING AUTH SERVICE
   // --------------------------------------------------
 
   const handleSignup = async (e) => {
@@ -394,46 +349,30 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/auth/signup`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name,
-          email,
-          password,
-        }),
-      });
-
+      const response = await signup(name, email, password);
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.detail || "Signup failed");
       }
 
-      alert("Account created successfully! ðŸŽ‰");
+      alert("Account created successfully! 🎉");
 
       setName("");
       setEmail("");
       setPassword("");
       setConfirmPassword("");
-
       setPage("login");
     } catch (error) {
       console.error("Signup error:", error);
-
-      alert(
-        error.message ||
-          "Something went wrong. Please try again."
-      );
+      alert(error.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   // --------------------------------------------------
-  // FORGOT PASSWORD - STEP 1
+  // FORGOT PASSWORD — STEP 1
   // --------------------------------------------------
 
   const handleForgotPassword = async (e) => {
@@ -447,38 +386,24 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${API_URL}/auth/forgot-password`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: resetEmail,
-          }),
-        }
-      );
+      const response = await fetch(`${API_URL}/auth/forgot-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: resetEmail }),
+      });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.detail || "Unable to reset password"
-        );
+        throw new Error(data.detail || "Unable to reset password");
       }
 
       setResetStep(2);
     } catch (error) {
-      console.error(
-        "Forgot password error:",
-        error
-      );
-
-      alert(
-        error.message ||
-          "Something went wrong. Please try again."
-      );
+      console.error("Forgot password error:", error);
+      alert(error.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -492,59 +417,42 @@ function App() {
     e.preventDefault();
 
     if (!resetCode || !newPassword) {
-      alert(
-        "Please enter the reset code and new password."
-      );
+      alert("Please enter the reset code and new password.");
       return;
     }
 
     if (newPassword.length < 8) {
-      alert(
-        "New password must be at least 8 characters."
-      );
+      alert("New password must be at least 8 characters.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${API_URL}/auth/reset-password`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: resetEmail,
-            code: resetCode,
-            new_password: newPassword,
-          }),
-        }
-      );
+      const response = await fetch(`${API_URL}/auth/reset-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: resetEmail,
+          code: resetCode,
+          new_password: newPassword,
+        }),
+      });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.detail || "Password reset failed"
-        );
+        throw new Error(data.detail || "Password reset failed");
       }
 
       setResetStep(4);
-
       setResetCode("");
       setNewPassword("");
     } catch (error) {
-      console.error(
-        "Reset password error:",
-        error
-      );
-
-      alert(
-        error.message ||
-          "Something went wrong. Please try again."
-      );
+      console.error("Reset password error:", error);
+      alert(error.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -554,10 +462,12 @@ function App() {
   // LOGOUT
   // --------------------------------------------------
 
-    const handleLogout = async () => {
+  const handleLogout = async () => {
     await clearAuth();
     setPage("login");
   };
+
+  // --------------------------------------------------
   // RESET FLOW
   // --------------------------------------------------
 
@@ -578,6 +488,14 @@ function App() {
   };
 
   // --------------------------------------------------
+  // EMAIL VERIFICATION PAGE
+  // --------------------------------------------------
+
+  if (isVerifyEmailPage) {
+    return <VerifyEmail />;
+  }
+
+  // --------------------------------------------------
   // DASHBOARD
   // --------------------------------------------------
 
@@ -595,7 +513,6 @@ function App() {
           </div>
 
           <span className="eyebrow">AUTHENTICATED</span>
-
           <h1>Welcome, {user.name}!</h1>
 
           <p className="subtitle">
@@ -610,14 +527,9 @@ function App() {
             />
           )}
 
-          <div className="account-email">
-            {user.email}
-          </div>
+          <div className="account-email">{user.email}</div>
 
-          <button
-            className="primary-button"
-            onClick={handleLogout}
-          >
+          <button className="primary-button" onClick={handleLogout}>
             Logout
           </button>
         </AuthCard>
@@ -630,7 +542,6 @@ function App() {
   // --------------------------------------------------
 
   if (page === "forgot-password") {
-    // STEP 1 â€” EMAIL
     if (resetStep === 1) {
       return (
         <div className="app-page">
@@ -639,13 +550,11 @@ function App() {
 
             <AuthCard>
               <div className="mobile-brand">AuthFlow</div>
-
               <div className="card-icon">
                 <MailIcon />
               </div>
 
               <h1>Forgot Password</h1>
-
               <p className="card-subtitle">
                 We'll send a 6-digit code to your email
               </p>
@@ -656,14 +565,12 @@ function App() {
 
                   <div className="input-wrapper">
                     <MailIcon />
-
                     <input
                       type="email"
                       placeholder="you@example.com"
                       value={resetEmail}
-                      onChange={(e) =>
-                        setResetEmail(e.target.value)
-                      }
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      required
                     />
                   </div>
                 </div>
@@ -673,9 +580,7 @@ function App() {
                   className="primary-button"
                   disabled={loading}
                 >
-                  {loading
-                    ? "Sending Code..."
-                    : "Send Reset Code"}
+                  {loading ? "Sending Code..." : "Send Reset Code"}
                 </button>
               </form>
 
@@ -684,7 +589,7 @@ function App() {
                 className="back-link"
                 onClick={backToLogin}
               >
-                â† Back to login
+                ← Back to login
               </button>
             </AuthCard>
           </div>
@@ -692,7 +597,6 @@ function App() {
       );
     }
 
-    // STEP 2 â€” EMAIL SENT
     if (resetStep === 2) {
       return (
         <div className="app-page">
@@ -700,28 +604,21 @@ function App() {
             <AuthCard className="state-card">
               <div className="state-icon email-state">
                 <MailLargeIcon />
-
                 <span className="state-check">
                   <CheckIcon />
                 </span>
               </div>
 
               <h1>Check your email</h1>
-
               <p className="card-subtitle">
                 We've sent a 6-digit reset code to
               </p>
-
-              <p className="reset-email-display">
-                {resetEmail}
-              </p>
+              <p className="reset-email-display">{resetEmail}</p>
 
               <div className="info-box">
                 <span className="info-icon">i</span>
-
                 <span>
-                  The code will expire in 10 minutes
-                  and can only be used once.
+                  The code will expire in 10 minutes and can only be used once.
                 </span>
               </div>
 
@@ -738,7 +635,7 @@ function App() {
                 className="back-link"
                 onClick={backToLogin}
               >
-                â† Back to login
+                ← Back to login
               </button>
             </AuthCard>
           </div>
@@ -746,7 +643,6 @@ function App() {
       );
     }
 
-    // STEP 3 â€” RESET PASSWORD
     if (resetStep === 3) {
       return (
         <div className="app-page">
@@ -755,81 +651,55 @@ function App() {
 
             <AuthCard>
               <div className="mobile-brand">AuthFlow</div>
-
               <div className="card-icon">
                 <LockIcon />
               </div>
 
               <h1>Reset Password</h1>
-
               <p className="card-subtitle">
-                Enter the 6-digit code sent to your
-                email and create a new password.
+                Enter the 6-digit code sent to your email and create a new
+                password.
               </p>
 
               <form onSubmit={handleResetPassword}>
                 <div className="input-group">
                   <label>Reset code</label>
-
                   <div className="input-wrapper">
-                    <span className="code-symbol">
-                      #
-                    </span>
-
+                    <span className="code-symbol">#</span>
                     <input
                       type="text"
                       inputMode="numeric"
-                      maxLength="6"
+                      maxLength={6}
                       placeholder="6-digit code"
                       value={resetCode}
                       onChange={(e) =>
-                        setResetCode(
-                          e.target.value.replace(
-                            /\D/g,
-                            ""
-                          )
-                        )
+                        setResetCode(e.target.value.replace(/\D/g, ""))
                       }
+                      required
                     />
                   </div>
                 </div>
 
                 <div className="input-group">
                   <label>New password</label>
-
                   <div className="input-wrapper">
                     <LockIcon />
-
                     <input
-                      type={
-                        showNewPassword
-                          ? "text"
-                          : "password"
-                      }
+                      type={showNewPassword ? "text" : "password"}
                       placeholder="Create a new password"
                       value={newPassword}
-                      onChange={(e) =>
-                        setNewPassword(e.target.value)
-                      }
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
                     />
-
                     <button
                       type="button"
                       className="eye-button"
-                      onClick={() =>
-                        setShowNewPassword(
-                          !showNewPassword
-                        )
-                      }
+                      onClick={() => setShowNewPassword(!showNewPassword)}
                       aria-label={
-                        showNewPassword
-                          ? "Hide password"
-                          : "Show password"
+                        showNewPassword ? "Hide password" : "Show password"
                       }
                     >
-                      <EyeIcon
-                        hidden={!showNewPassword}
-                      />
+                      <EyeIcon hidden={!showNewPassword} />
                     </button>
                   </div>
                 </div>
@@ -839,9 +709,7 @@ function App() {
                   className="primary-button"
                   disabled={loading}
                 >
-                  {loading
-                    ? "Resetting Password..."
-                    : "Reset Password"}
+                  {loading ? "Resetting Password..." : "Reset Password"}
                 </button>
               </form>
 
@@ -850,7 +718,7 @@ function App() {
                 className="back-link"
                 onClick={() => setResetStep(2)}
               >
-                â† Back
+                ← Back
               </button>
             </AuthCard>
           </div>
@@ -858,7 +726,6 @@ function App() {
       );
     }
 
-    // STEP 4 â€” SUCCESS
     return (
       <div className="app-page success-page">
         <div className="auth-layout single-state">
@@ -868,10 +735,9 @@ function App() {
             </div>
 
             <h1>Password Reset Successful</h1>
-
             <p className="card-subtitle">
-              Your password has been reset successfully.
-              You can now log in with your new password.
+              Your password has been reset successfully. You can now log in
+              with your new password.
             </p>
 
             <button
@@ -899,9 +765,7 @@ function App() {
 
           <AuthCard>
             <div className="mobile-brand">AuthFlow</div>
-
             <h1>Create Account</h1>
-
             <p className="card-subtitle">
               Fill in your details to get started
             </p>
@@ -909,63 +773,48 @@ function App() {
             <form onSubmit={handleSignup}>
               <div className="input-group">
                 <label>Full name</label>
-
                 <div className="input-wrapper">
                   <UserIcon />
-
                   <input
                     type="text"
                     placeholder="Full name"
                     value={name}
-                    onChange={(e) =>
-                      setName(e.target.value)
-                    }
+                    onChange={(e) => setName(e.target.value)}
+                    required
                   />
                 </div>
               </div>
 
               <div className="input-group">
                 <label>Email address</label>
-
                 <div className="input-wrapper">
                   <MailIcon />
-
                   <input
                     type="email"
                     placeholder="you@example.com"
                     value={email}
-                    onChange={(e) =>
-                      setEmail(e.target.value)
-                    }
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
                   />
                 </div>
               </div>
 
               <div className="input-group">
                 <label>Password</label>
-
                 <div className="input-wrapper">
                   <LockIcon />
-
                   <input
-                    type={
-                      showPassword
-                        ? "text"
-                        : "password"
-                    }
+                    type={showPassword ? "text" : "password"}
                     placeholder="Password"
                     value={password}
-                    onChange={(e) =>
-                      setPassword(e.target.value)
-                    }
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
                   />
-
                   <button
                     type="button"
                     className="eye-button"
-                    onClick={() =>
-                      setShowPassword(!showPassword)
-                    }
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     <EyeIcon hidden={!showPassword} />
                   </button>
@@ -974,37 +823,26 @@ function App() {
 
               <div className="input-group">
                 <label>Confirm password</label>
-
                 <div className="input-wrapper">
                   <LockIcon />
-
                   <input
-                    type={
-                      showConfirmPassword
-                        ? "text"
-                        : "password"
-                    }
+                    type={showConfirmPassword ? "text" : "password"}
                     placeholder="Confirm password"
                     value={confirmPassword}
-                    onChange={(e) =>
-                      setConfirmPassword(
-                        e.target.value
-                      )
-                    }
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
                   />
-
                   <button
                     type="button"
                     className="eye-button"
                     onClick={() =>
-                      setShowConfirmPassword(
-                        !showConfirmPassword
-                      )
+                      setShowConfirmPassword(!showConfirmPassword)
+                    }
+                    aria-label={
+                      showConfirmPassword ? "Hide password" : "Show password"
                     }
                   >
-                    <EyeIcon
-                      hidden={!showConfirmPassword}
-                    />
+                    <EyeIcon hidden={!showConfirmPassword} />
                   </button>
                 </div>
               </div>
@@ -1014,9 +852,7 @@ function App() {
                 className="primary-button"
                 disabled={loading}
               >
-                {loading
-                  ? "Creating Account..."
-                  : "Create Account"}
+                {loading ? "Creating Account..." : "Create Account"}
               </button>
             </form>
 
@@ -1027,11 +863,7 @@ function App() {
             <div className="google-login">
               <GoogleLogin
                 onSuccess={handleGoogleLogin}
-                onError={() =>
-                  console.log(
-                    "Google Signup Failed"
-                  )
-                }
+                onError={() => console.error("Google Signup Failed")}
                 width="100%"
               />
             </div>
@@ -1063,9 +895,7 @@ function App() {
 
         <AuthCard>
           <div className="mobile-brand">AuthFlow</div>
-
           <h1>Sign In</h1>
-
           <p className="card-subtitle">
             Enter your email and password to continue
           </p>
@@ -1073,17 +903,14 @@ function App() {
           <form onSubmit={handleEmailLogin}>
             <div className="input-group">
               <label>Email address</label>
-
               <div className="input-wrapper">
                 <MailIcon />
-
                 <input
                   type="email"
                   placeholder="you@example.com"
                   value={email}
-                  onChange={(e) =>
-                    setEmail(e.target.value)
-                  }
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
                 />
               </div>
             </div>
@@ -1091,7 +918,6 @@ function App() {
             <div className="input-group">
               <div className="password-label">
                 <label>Password</label>
-
                 <button
                   type="button"
                   className="forgot-link"
@@ -1103,26 +929,18 @@ function App() {
 
               <div className="input-wrapper">
                 <LockIcon />
-
                 <input
-                  type={
-                    showPassword
-                      ? "text"
-                      : "password"
-                  }
+                  type={showPassword ? "text" : "password"}
                   placeholder="Password"
                   value={password}
-                  onChange={(e) =>
-                    setPassword(e.target.value)
-                  }
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
                 />
-
                 <button
                   type="button"
                   className="eye-button"
-                  onClick={() =>
-                    setShowPassword(!showPassword)
-                  }
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   <EyeIcon hidden={!showPassword} />
                 </button>
@@ -1141,9 +959,7 @@ function App() {
               className="primary-button"
               disabled={loading}
             >
-              {loading
-                ? "Signing In..."
-                : "Sign In"}
+              {loading ? "Signing In..." : "Sign In"}
             </button>
           </form>
 
@@ -1153,17 +969,11 @@ function App() {
 
           <div className="google-login">
             {loading ? (
-              <p className="google-loading">
-                Signing you in...
-              </p>
+              <p className="google-loading">Signing you in...</p>
             ) : (
               <GoogleLogin
                 onSuccess={handleGoogleLogin}
-                onError={() =>
-                  console.log(
-                    "Google Login Failed"
-                  )
-                }
+                onError={() => console.error("Google Login Failed")}
                 width="100%"
               />
             )}
@@ -1196,9 +1006,3 @@ export default function AppWithGoogle() {
     </GoogleOAuthProvider>
   );
 }
-
-
-
-
-
-
