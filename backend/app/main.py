@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+﻿from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -92,6 +92,7 @@ def root():
 @limiter.limit("5/minute")
 def google_login(
     request: Request,
+    response: Response,
     data: GoogleTokenRequest,
 ):
     db = SessionLocal()
@@ -103,24 +104,25 @@ def google_login(
             settings.google_client_id,
         )
 
+
         name = google_user.get("name", "Google User")
         email = google_user.get("email", "").lower().strip()
+        email_verified = google_user.get("email_verified") is True
         picture = google_user.get("picture")
 
-        if not email:
+        if not email or not email_verified:
             raise HTTPException(
-                status_code=400,
-                detail="Google account email not available",
+                status_code=401,
+                detail="Google account email must be verified",
             )
 
-        existing_user = (
+        user = (
             db.query(User)
             .filter(User.email == email)
             .first()
         )
 
-        if existing_user:
-            user = existing_user
+        if user:
             message = "Login successful!"
         else:
             user = User(
@@ -128,14 +130,11 @@ def google_login(
                 email=email,
                 password=None,
             )
-
             db.add(user)
             db.commit()
             db.refresh(user)
-
             message = "Google account created successfully!"
 
-        # Create the same JWT tokens used by normal email login.
         token_data = {
             "sub": str(user.id),
             "email": user.email,
@@ -150,11 +149,29 @@ def google_login(
             refresh_token=refresh_token,
         )
 
+        # Store tokens in HttpOnly cookies, not in the response body.
+        response.set_cookie(
+            key=settings.access_token_cookie_name,
+            value=access_token,
+            httponly=True,
+            secure=settings.cookie_secure,
+            samesite=settings.cookie_samesite,
+            path="/",
+            max_age=settings.access_token_expire_minutes * 60,
+        )
+
+        response.set_cookie(
+            key=settings.refresh_token_cookie_name,
+            value=refresh_token,
+            httponly=True,
+            secure=settings.cookie_secure,
+            samesite=settings.cookie_samesite,
+            path="/",
+            max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+        )
+
         return {
             "message": message,
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer",
             "user": {
                 "id": user.id,
                 "name": user.name,

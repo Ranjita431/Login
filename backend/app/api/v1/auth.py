@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import secrets
 
 from app.core.config import settings
+from app.datamodels.auth import MessageResponse
 
 from app.models.email_verification import EmailVerification
 
@@ -78,11 +79,8 @@ def cleanup_refresh_tokens(db: Session):
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     db.query(RefreshToken).filter(
-        (RefreshToken.expires_at < now)
-        | (RefreshToken.revoked_at.is_not(None))
-    ).delete(
-        synchronize_session=False
-    )
+        RefreshToken.expires_at < now
+    ).delete(synchronize_session=False)
 
     db.commit()
 
@@ -230,7 +228,7 @@ def verify_email(
         "message": "Email verified successfully",
     }
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=MessageResponse)
 @limiter.limit("5/minute")
 def login(
     request: Request,
@@ -297,15 +295,11 @@ def login(
       max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
 )
 
-    return {
-    "access_token": access_token,
-    "refresh_token": refresh_token,
-    "token_type": "bearer",
-}
+    return {"message": "Login successful"}
 
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh", response_model=MessageResponse)
 @limiter.limit("10/minute")
 def refresh_token(
     request: Request,
@@ -438,11 +432,7 @@ def refresh_token(
     )
 
     # Keep the JSON response for compatibility with existing clients.
-    return {
-        "access_token": new_access_token,
-        "refresh_token": new_refresh_token,
-        "token_type": "bearer",
-    }
+    return {"message": "Tokens refreshed successfully"}
 
 
 

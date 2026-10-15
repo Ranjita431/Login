@@ -1,24 +1,26 @@
+
 from uuid import UUID
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+from fastapi import Cookie, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import PyJWTError
 from sqlalchemy.orm import Session
-
-from fastapi import Cookie
 
 from app.core.security import decode_token
 from app.db import get_db
 from app.models import User
 
 
-security = HTTPBearer()
+# Allow authentication through either a Bearer token or an HttpOnly cookie.
+security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     access_token: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
 ):
+    # Prefer the access token cookie; otherwise use the Bearer header.
     token = access_token
 
     if not token and credentials:
@@ -30,9 +32,10 @@ def get_current_user(
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Decode and validate the JWT.
     try:
         payload = decode_token(token)
-
     except PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -40,6 +43,7 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Only accept access tokens for protected endpoints.
     if payload.get("type") != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -56,15 +60,17 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Convert the UUID string from the token into a UUID object.
     try:
-        user_id = UUID(user_id)
-    except (TypeError, ValueError):
+        user_id = UUID(str(user_id))
+    except (TypeError, ValueError, AttributeError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid user ID",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Find the user in PostgreSQL.
     user = (
         db.query(User)
         .filter(User.id == user_id)
