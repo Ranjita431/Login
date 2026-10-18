@@ -1,6 +1,8 @@
 ﻿from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+
+
 from google.oauth2 import id_token
 from google.auth.transport import requests
 
@@ -21,6 +23,9 @@ from app.datamodels.auth import (
     MessageResponse,
 )
 
+from app.core.logging_config import configure_logging
+
+configure_logging()
 # Import models before creating tables
 Base.metadata.create_all(bind=engine)
 
@@ -175,11 +180,22 @@ def google_login(
             },
         }
 
+
     except ValueError:
         raise HTTPException(
             status_code=401,
             detail="Invalid Google token",
         )
-
+    except HTTPException:
+        raise
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "Unexpected error during Google login"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Google login failed",
+        )
     finally:
         db.close()
