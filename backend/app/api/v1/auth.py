@@ -273,6 +273,12 @@ def login(
             detail="Invalid email or password",
         )
 
+    if not user.is_email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Please verify your email before logging in.",
+        )
+    
     access_token = create_access_token(
         {"sub": str(user.id)}
     )
@@ -525,16 +531,14 @@ async def forgot_password(
     user = get_user_by_email(db, email)
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="No account found with this email",
-        )
+        return {
+            "message": "If an eligible account exists, password reset instructions will be sent."
+        }
 
     if not user.password:
-        raise HTTPException(
-            status_code=400,
-            detail="This account uses Google login. Please sign in with Google.",
-        )
+        return {
+            "message": "If an eligible account exists, password reset instructions will be sent."
+        }
 
     old_resets = (
         db.query(PasswordReset)

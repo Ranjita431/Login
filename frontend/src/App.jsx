@@ -1,12 +1,15 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useState } from "react";
+import useAuth from "./hooks/useAuth";
+import API_URL from "./services/api";
 import VerifyEmail from "./pages/VerifyEmail";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import "./App.css";
-import API_URL from "./services/api";
+
 import { login, signup, googleLogin } from "./services/auth";
+import Dashboard from "./pages/Dashboard";
 
 const clientId =
   "484994562541-otpt7tlqq44c1lcacps3qq6bvsua6him.apps.googleusercontent.com";
@@ -31,90 +34,17 @@ function App() {
   const isVerifyEmailPage =
     window.location.pathname === "/verify-email";
 
-  const [user, setUser] = useState(null);
-  const [page, setPage] = useState("login");
+      const [page, setPage] = useState("login");
 
-  // Authentication uses HttpOnly cookies, not localStorage.
-  const clearAuth = async () => {
-    try {
-      await fetch(`${API_URL}/auth/logout`, {
-        method: "POST",
-        credentials: "include",
-      });
-    } catch (error) {
-      console.error("Logout request failed:", error);
-    } finally {
-      setUser(null);
-    }
-  };
+    const {
+     user,
+     clearAuth,
+     loadCurrentUser,
+     isInitializing,
+   } = useAuth();
 
-  const refreshAccessToken = async () => {
-    try {
-      const response = await fetch(`${API_URL}/auth/refresh`, {
-        method: "POST",
-        credentials: "include",
-      });
 
-      return response.ok;
-    } catch (error) {
-      console.error("Session refresh failed:", error);
-      return false;
-    }
-  };
 
-  const authenticatedFetch = async (url, options = {}) => {
-    const makeRequest = () =>
-      fetch(url, {
-        ...options,
-        credentials: "include",
-        headers: new Headers(options.headers || {}),
-      });
-
-    let response = await makeRequest();
-
-    if (response.status === 401) {
-      const refreshed = await refreshAccessToken();
-
-      if (!refreshed) {
-        throw new Error(
-          "Your session has expired. Please sign in again."
-        );
-      }
-
-      response = await makeRequest();
-    }
-
-    return response;
-  };
-
-  const loadCurrentUser = async () => {
-    const response = await authenticatedFetch(`${API_URL}/users/me`, {
-      method: "GET",
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.detail || "Failed to load user profile");
-    }
-
-    setUser(data);
-    return data;
-  };
-
-  useEffect(() => {
-    if (isVerifyEmailPage) return;
-
-    const restoreSession = async () => {
-      try {
-        await loadCurrentUser();
-      } catch {
-        setUser(null);
-      }
-    };
-
-    restoreSession();
-  }, []);
 
   // --------------------------------------------------
   // LOGIN / SIGNUP STATE
@@ -143,6 +73,10 @@ function App() {
   // 4 = success
   const [resetStep, setResetStep] = useState(1);
   const [showNewPassword, setShowNewPassword] = useState(false);
+
+  if (isInitializing && !isVerifyEmailPage) {
+  return <div className="app-loading">Loading your session...</div>;
+}
 
   // --------------------------------------------------
   // GOOGLE LOGIN
