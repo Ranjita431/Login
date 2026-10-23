@@ -12,3 +12,4 @@ class PasswordReset(Base):
     email = Column(String, nullable=False)
     token = Column(String, nullable=False)
     expires_at = Column(DateTime, nullable=False)
+    __table_args__ = (Index("ix_password_resets_id", "legacy_id"),)

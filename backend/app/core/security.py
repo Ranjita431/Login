@@ -50,6 +50,6 @@ def decode_token(token: str) -> dict:
         settings.jwt_secret_key,
         algorithms=[settings.jwt_algorithm],
         options={
-            "require": ["exp", "sub", "type"],
+            "require": ["exp", "iat", "sub", "type"],
         },
     )

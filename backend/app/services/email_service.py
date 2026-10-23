@@ -1,38 +1,17 @@
+
+import logging
 from email.message import EmailMessage
 
 import aiosmtplib
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 
-async def send_password_reset_email(
-    recipient_email: str,
-    reset_code: str,
-) -> None:
+
+async def _send_email(message: EmailMessage) -> None:
     if not settings.smtp_email or not settings.smtp_password:
         raise RuntimeError("Email service is not configured")
-
-    message = EmailMessage()
-
-    message["From"] = settings.smtp_email
-    message["To"] = recipient_email
-    message["Subject"] = "Password Reset Code"
-
-    message.set_content(
-        f"""Hello,
-
-We received a request to reset your password.
-
-Your password reset code is: {reset_code}
-
-This code will expire in 10 minutes and can only be used once.
-
-If you did not request a password reset, you can ignore this email.
-
-Regards,
-Login Authentication System
-"""
-    )
 
     await aiosmtplib.send(
         message,
@@ -41,18 +20,46 @@ Login Authentication System
         start_tls=True,
         username=settings.smtp_email,
         password=settings.smtp_password,
+        timeout=30,
     )
+
+
+
+async def send_password_reset_email(
+    recipient_email: str,
+    reset_code: str,
+) -> None:
+    message = EmailMessage()
+    message["From"] = f"AuthFlow <{settings.smtp_email}>"
+    message["To"] = recipient_email
+    message["Subject"] = "Your AuthFlow Password Reset Code"
+
+    message.set_content(
+        f"""Hello,
+
+We received a request to reset the password for your AuthFlow account.
+
+Your password reset code is: {reset_code}
+
+For your security, this code expires in 10 minutes and can only be used once.
+
+If you did not request a password reset, you can safely ignore this email.
+
+Best regards,
+The AuthFlow Team
+"""
+    )
+
+    await _send_email(message)
+
+
 
 async def send_email_verification_email(
     recipient_email: str,
     verification_token: str,
-):
-    if not settings.smtp_email or not settings.smtp_password:
-        raise RuntimeError("Email service is not configured")
-
+) -> None:
     message = EmailMessage()
-
-    message["From"] = settings.smtp_email
+    message["From"] = f"AuthFlow <{settings.smtp_email}>"
     message["To"] = recipient_email
     message["Subject"] = "Verify your email address"
 
@@ -63,26 +70,33 @@ async def send_email_verification_email(
     )
 
     message.set_content(
-        f"""
-Hello,
+    f"""Hello,
 
-Thank you for creating an account.
+Thank you for creating an AuthFlow account.
 
-Please verify your email address by opening this link:
+To verify your email address, please open the link below:
 
 {verification_url}
 
-This verification link will expire in 15 minutes.
+For your security, this verification link expires in 15 minutes.
 
-If you did not create this account, you can ignore this email.
+If you did not create an AuthFlow account, you can safely ignore this email.
+
+Best regards,
+The AuthFlow Team
 """
-    )
+)
 
-    await aiosmtplib.send(
-        message,
-        hostname=settings.smtp_host,
-        port=settings.smtp_port,
-        start_tls=True,
-        username=settings.smtp_email,
-        password=settings.smtp_password,
-    )
+    try:
+        response = await _send_email(message)
+        logger.info(
+            "Verification email accepted by SMTP server for %s; response: %s",
+            recipient_email,
+            response,
+        )
+    except Exception:
+        logger.exception(
+            "SMTP verification email failed for %s",
+            recipient_email,
+        )
+        raise

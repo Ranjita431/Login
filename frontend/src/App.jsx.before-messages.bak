@@ -1,0 +1,360 @@
+﻿import { useState } from "react";
+import useAuth from "./hooks/useAuth";
+import VerifyEmail from "./pages/VerifyEmail";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import ForgotPassword from "./pages/ForgotPassword";
+import { GoogleOAuthProvider } from "@react-oauth/google";
+import "./App.css";
+
+import { login, signup, googleLogin, forgotPassword, resetPassword } from "./services/auth";
+import Dashboard from "./pages/Dashboard";
+
+const clientId =
+  "484994562541-otpt7tlqq44c1lcacps3qq6bvsua6him.apps.googleusercontent.com";
+
+
+// --------------------------------------------------
+// BRAND PANEL
+// --------------------------------------------------
+
+
+
+// --------------------------------------------------
+// AUTH CARD
+// --------------------------------------------------
+
+
+// --------------------------------------------------
+// MAIN APP
+// --------------------------------------------------
+
+function App() {
+  const isVerifyEmailPage =
+    window.location.pathname === "/verify-email";
+
+      const [page, setPage] = useState("login");
+
+    const {
+    user,
+    clearAuth,
+    loadCurrentUser,
+    isInitializing,
+  } = useAuth();
+
+   const handleLogout = async () => {
+  await clearAuth();
+  setPage("login");
+};
+
+
+  // --------------------------------------------------
+  // LOGIN / SIGNUP STATE
+  // --------------------------------------------------
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // --------------------------------------------------
+  // FORGOT PASSWORD STATE
+  // --------------------------------------------------
+
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // 1 = enter email
+  // 2 = email sent
+  // 3 = enter reset code + new password
+  // 4 = success
+  const [resetStep, setResetStep] = useState(1);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
+  if (isInitializing && !isVerifyEmailPage) {
+  return <div className="app-loading">Loading your session...</div>;
+}
+
+  // --------------------------------------------------
+  // GOOGLE LOGIN
+  // --------------------------------------------------
+
+const handleGoogleLogin = async (credentialResponse) => {
+  setLoading(true);
+
+  try {
+    const response = await googleLogin(credentialResponse.credential);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Google login failed");
+    }
+
+    await loadCurrentUser();
+    setEmail("");
+    setPassword("");
+  } catch (error) {
+    console.error("Google login error:", error);
+    alert(error.message || "Google login failed. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
+  // --------------------------------------------------
+  // EMAIL LOGIN — USING AUTH SERVICE
+  // --------------------------------------------------
+
+  const handleEmailLogin = async (e) => {
+    e.preventDefault();
+
+    if (!email || !password) {
+      alert("Please enter your email and password.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await login(email, password);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Login failed");
+      }
+
+      await loadCurrentUser();
+
+      setEmail("");
+      setPassword("");
+    } catch (error) {
+      console.error("Email login error:", error);
+      alert(error.message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --------------------------------------------------
+  // SIGNUP — USING AUTH SERVICE
+  // --------------------------------------------------
+
+  const handleSignup = async (e) => {
+    e.preventDefault();
+
+    if (!name || !email || !password || !confirmPassword) {
+      alert("Please fill in all fields.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      alert("Passwords do not match.");
+      return;
+    }
+
+    if (password.length < 8) {
+      alert("Password must be at least 8 characters.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await signup(name, email, password);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Signup failed");
+      }
+
+      alert("Account created successfully! 🎉");
+
+      setName("");
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
+      setPage("login");
+    } catch (error) {
+      console.error("Signup error:", error);
+      alert(error.message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --------------------------------------------------
+  // FORGOT PASSWORD — STEP 1
+  // --------------------------------------------------
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const response = await forgotPassword(resetEmail);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Failed to send reset code.");
+      setSuccess(data.message || "If the email exists, a reset code has been sent.");
+      setResetStep("reset");
+    } catch (err) {
+      setError(err.message || "Failed to send reset code.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const response = await resetPassword(resetEmail, resetCode, newPassword);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Failed to reset password.");
+      setSuccess(data.message || "Password reset successfully.");
+      setResetStep("request");
+      setResetCode("");
+      setNewPassword("");
+    } catch (err) {
+      setError(err.message || "Failed to reset password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startForgotPassword = () => {
+    setResetEmail(email);
+    setResetCode("");
+    setNewPassword("");
+    setResetStep(1);
+    setPage("forgot-password");
+  };
+
+  const backToLogin = () => {
+    setResetEmail("");
+    setResetCode("");
+    setNewPassword("");
+    setResetStep(1);
+    setPage("login");
+  };
+
+  // --------------------------------------------------
+  // EMAIL VERIFICATION PAGE
+  // --------------------------------------------------
+
+  if (isVerifyEmailPage) {
+    return <VerifyEmail />;
+  }
+
+  // --------------------------------------------------
+  // DASHBOARD
+  // --------------------------------------------------
+
+if (user) {
+  return <Dashboard user={user} onLogout={handleLogout} />;
+}
+
+  // --------------------------------------------------
+  // FORGOT / RESET PASSWORD
+  // --------------------------------------------------
+
+if (page === "forgot-password") {
+  return (
+    <ForgotPassword
+      resetStep={resetStep}
+      setResetStep={setResetStep}
+      resetEmail={resetEmail}
+      setResetEmail={setResetEmail}
+      resetCode={resetCode}
+      setResetCode={setResetCode}
+      newPassword={newPassword}
+      setNewPassword={setNewPassword}
+      showNewPassword={showNewPassword}
+      setShowNewPassword={setShowNewPassword}
+      loading={loading}
+      handleForgotPassword={handleForgotPassword}
+      handleResetPassword={handleResetPassword}
+      backToLogin={backToLogin}
+    />
+  );
+}
+  // --------------------------------------------------
+  // SIGNUP PAGE
+  // --------------------------------------------------
+
+if (page === "signup") {
+  return (
+    <Signup
+      name={name}
+      setName={setName}
+      email={email}
+      setEmail={setEmail}
+      password={password}
+      setPassword={setPassword}
+      confirmPassword={confirmPassword}
+      setConfirmPassword={setConfirmPassword}
+      showPassword={showPassword}
+      setShowPassword={setShowPassword}
+      showConfirmPassword={showConfirmPassword}
+      setShowConfirmPassword={setShowConfirmPassword}
+      loading={loading}
+      handleSignup={handleSignup}
+      handleGoogleLogin={handleGoogleLogin}
+      setPage={setPage}
+    />
+  );
+}
+  // --------------------------------------------------
+  // LOGIN PAGE
+  // --------------------------------------------------
+
+  return (
+    <Login
+      email={email}
+      setEmail={setEmail}
+      password={password}
+      setPassword={setPassword}
+      showPassword={showPassword}
+      setShowPassword={setShowPassword}
+      loading={loading}
+      handleEmailLogin={handleEmailLogin}
+      startForgotPassword={startForgotPassword}
+      handleGoogleLogin={handleGoogleLogin}
+      setPage={setPage}
+    />
+  );
+
+// --------------------------------------------------
+// GOOGLE PROVIDER
+// --------------------------------------------------
+}
+
+// --------------------------------------------------
+// GOOGLE PROVIDER
+// --------------------------------------------------
+
+export default function AppWithGoogle() {
+  return (
+    <GoogleOAuthProvider clientId={clientId}>
+      <App />
+    </GoogleOAuthProvider>
+  );
+}
+
+
+
+
+

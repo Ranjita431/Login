@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useState } from "react";
 
 const API_URL = "http://localhost:8000";
 
@@ -6,7 +6,6 @@ function VerifyEmail() {
   const [status, setStatus] = useState("verifying");
   const [message, setMessage] = useState("");
 
-  const verificationStarted = useRef(false);
 
   useEffect(() => {
     const verifyEmail = async () => {

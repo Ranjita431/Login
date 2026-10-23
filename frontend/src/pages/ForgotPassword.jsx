@@ -1,4 +1,4 @@
-import {
+﻿import {
   AuthCard,
   LockIcon,
   MailIcon,
@@ -23,6 +23,8 @@ export default function ForgotPassword({
   handleForgotPassword,
   handleResetPassword,
   backToLogin,
+  error,
+  success,
 }) {
   if (resetStep === 1) {
     return (
@@ -64,13 +66,15 @@ export default function ForgotPassword({
                 {loading ? "Sending Code..." : "Send Reset Code"}
               </button>
             </form>
+            {error && <p className="error-message">{error}</p>}
+            {success && <p className="success-message">{success}</p>}
 
             <button
               type="button"
               className="back-link"
               onClick={backToLogin}
             >
-              ← Back to login
+              â† Back to login
             </button>
           </AuthCard>
         </div>
@@ -116,13 +120,29 @@ export default function ForgotPassword({
               className="back-link"
               onClick={backToLogin}
             >
-              ← Back to login
+              â† Back to login
             </button>
           </AuthCard>
         </div>
       </div>
     );
   }
+  if (resetStep === 4) {
+    return (
+      <div className="app-page">
+        <div className="auth-layout single-state">
+          <div className="auth-card">
+            <h1>Password reset successfully!</h1>
+            <p>Your password has been updated. You can now sign in with your new password.</p>
+            <button type="button" className="primary-button" onClick={backToLogin}>
+              Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
 
   if (resetStep === 3) {
     return (
@@ -193,13 +213,15 @@ export default function ForgotPassword({
                 {loading ? "Resetting Password..." : "Reset Password"}
               </button>
             </form>
+            {error && <p className="error-message">{error}</p>}
+            {success && <p className="success-message">{success}</p>}
 
             <button
               type="button"
               className="back-link"
               onClick={() => setResetStep(2)}
             >
-              ← Back
+              â† Back
             </button>
           </AuthCard>
         </div>
@@ -233,3 +255,4 @@ export default function ForgotPassword({
     </div>
   );
 }
+

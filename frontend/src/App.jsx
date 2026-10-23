@@ -1,6 +1,5 @@
 ﻿import { useState } from "react";
 import useAuth from "./hooks/useAuth";
-import API_URL from "./services/api";
 import VerifyEmail from "./pages/VerifyEmail";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -8,7 +7,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import "./App.css";
 
-import { login, signup, googleLogin } from "./services/auth";
+import { login, signup, googleLogin, forgotPassword, resetPassword } from "./services/auth";
 import Dashboard from "./pages/Dashboard";
 
 const clientId =
@@ -37,13 +36,16 @@ function App() {
       const [page, setPage] = useState("login");
 
     const {
-     user,
-     clearAuth,
-     loadCurrentUser,
-     isInitializing,
-   } = useAuth();
+    user,
+    clearAuth,
+    loadCurrentUser,
+    isInitializing,
+  } = useAuth();
 
-
+   const handleLogout = async () => {
+  await clearAuth();
+  setPage("login");
+};
 
 
   // --------------------------------------------------
@@ -66,6 +68,8 @@ function App() {
   const [resetEmail, setResetEmail] = useState("");
   const [resetCode, setResetCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   // 1 = enter email
   // 2 = email sent
@@ -193,99 +197,43 @@ const handleGoogleLogin = async (credentialResponse) => {
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
-
-    if (!resetEmail) {
-      alert("Please enter your email address.");
-      return;
-    }
-
     setLoading(true);
+    setError("");
+    setSuccess("");
 
     try {
-      const response = await fetch(`${API_URL}/auth/forgot-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email: resetEmail }),
-      });
-
+      const response = await forgotPassword(resetEmail);
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Unable to reset password");
-      }
-
-      setResetStep(2);
-    } catch (error) {
-      console.error("Forgot password error:", error);
-      alert(error.message || "Something went wrong. Please try again.");
+      if (!response.ok) throw new Error(data.detail || "Failed to send reset code.");
+      setSuccess("");
+      setResetStep(3);
+    } catch (err) {
+      setError(err.message || "Failed to send reset code.");
     } finally {
       setLoading(false);
     }
   };
-
-  // --------------------------------------------------
-  // RESET PASSWORD
-  // --------------------------------------------------
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
-
-    if (!resetCode || !newPassword) {
-      alert("Please enter the reset code and new password.");
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      alert("New password must be at least 8 characters.");
-      return;
-    }
-
     setLoading(true);
+    setError("");
+    setSuccess("");
 
     try {
-      const response = await fetch(`${API_URL}/auth/reset-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: resetEmail,
-          code: resetCode,
-          new_password: newPassword,
-        }),
-      });
-
+      const response = await resetPassword(resetEmail, resetCode, newPassword);
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Password reset failed");
-      }
-
+      if (!response.ok) throw new Error(data.detail || "Failed to reset password.");
+      setSuccess(data.message || "Password reset successfully.");
       setResetStep(4);
       setResetCode("");
       setNewPassword("");
-    } catch (error) {
-      console.error("Reset password error:", error);
-      alert(error.message || "Something went wrong. Please try again.");
+    } catch (err) {
+      setError(err.message || "Failed to reset password.");
     } finally {
       setLoading(false);
     }
   };
-
-  // --------------------------------------------------
-  // LOGOUT
-  // --------------------------------------------------
-
-  const handleLogout = async () => {
-    await clearAuth();
-    setPage("login");
-  };
-
-  // --------------------------------------------------
-  // RESET FLOW
-  // --------------------------------------------------
 
   const startForgotPassword = () => {
     setResetEmail(email);
@@ -339,6 +287,8 @@ if (page === "forgot-password") {
       loading={loading}
       handleForgotPassword={handleForgotPassword}
       handleResetPassword={handleResetPassword}
+      error={error}
+      success={success}
       backToLogin={backToLogin}
     />
   );
@@ -405,3 +355,11 @@ export default function AppWithGoogle() {
     </GoogleOAuthProvider>
   );
 }
+
+
+
+
+
+
+
+

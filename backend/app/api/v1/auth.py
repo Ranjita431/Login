@@ -400,6 +400,7 @@ def refresh_token(
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
 
+
     if now > expires_at:
         stored_token.revoked_at = now.replace(tzinfo=None)
         db.commit()
@@ -409,11 +410,7 @@ def refresh_token(
             detail="Refresh token has expired",
         )
 
-    # Revoke the old refresh token.
-    stored_token.revoked_at = now.replace(tzinfo=None)
-    db.commit()
-
-    # Generate new tokens.
+    # Generate replacement tokens before changing the database.
     new_access_token = create_access_token(
         {"sub": str(user_uuid)}
     )
@@ -421,12 +418,32 @@ def refresh_token(
         {"sub": str(user_uuid)}
     )
 
-    # Save the new refresh token in the database.
-    save_refresh_token(
-        db=db,
+    # Prepare the replacement record without committing separately.
+    new_payload = decode_token(new_refresh_token)
+    new_expires_at = datetime.fromtimestamp(
+        new_payload["exp"],
+        tz=timezone.utc,
+    ).replace(tzinfo=None)
+
+    new_record = RefreshToken(
         user_id=user_uuid,
-        refresh_token=new_refresh_token,
+        token_id=new_payload["jti"],
+        expires_at=new_expires_at,
     )
+
+    # Revoke the old token and save its replacement atomically.
+    try:
+        stored_token.revoked_at = now.replace(tzinfo=None)
+        db.add(new_record)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Refresh-token rotation failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not refresh session",
+        )
+
 
     # Replace the HttpOnly cookies.
     response.set_cookie(
