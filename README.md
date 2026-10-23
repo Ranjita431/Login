@@ -1,138 +1,203 @@
-# Login Authentication System
+# AuthFlow — Full-Stack Authentication System
 
-A full-stack authentication system built with **React** and **FastAPI**, providing secure user registration, login, Google authentication, and email-based password recovery.
-
----
-
-## Overview
-
-This project demonstrates a complete authentication workflow with a modern React frontend and a FastAPI backend.
-
-Users can create an account using their email and password, sign in with Google, and securely recover their password through a time-limited email verification code.
-
-The application uses SQLite for data persistence and SMTP for sending password-reset emails.
-
----
+A full-stack authentication application built with **React, Vite, FastAPI, and PostgreSQL**. It provides email/password authentication, email verification, Google sign-in, password recovery, and token-based session management.
 
 ## Features
 
 ### Authentication
-
 - User registration with email and password
+- Email verification
 - Email/password login
-- Google OAuth authentication
-- Password visibility toggle
-- Authentication error handling
+- Google OAuth sign-in
+- JWT access and refresh tokens
+- HTTP-only cookies for authentication
+- Refresh-token rotation and logout
 
 ### Password Recovery
-
 - Forgot-password workflow
-- Email-based password reset codes
-- Time-limited reset codes
-- One-time-use reset codes
-- Password reset functionality
-- Reset-code validation and expiration handling
+- Email-based password-reset codes
+- Reset-code expiration and validation
+- Password reset with the new password
 
 ### Backend
-
-- REST API built with FastAPI
+- FastAPI REST API
 - SQLAlchemy ORM
-- SQLite database
-- bcrypt password hashing
+- PostgreSQL database
+- Alembic database migrations
+- Password hashing
 - SMTP email delivery using `aiosmtplib`
-- Environment-based configuration for sensitive credentials
-- CORS configuration for frontend-backend communication
+- Environment-based configuration
+- Request logging
+- Rate limiting
+- CORS configuration
 
 ### Frontend
-
-- React
-- Vite
-- Responsive authentication interface
-- Login, registration, forgot-password, and reset-password screens
-- Google Sign-In integration
-- Form validation and user feedback
-
----
+- React and Vite
+- Separate pages, components, hooks, and services
+- Login and registration forms
+- Google sign-in integration
+- Email verification
+- Forgot-password and reset-password screens
+- Authentication state and session restoration
+- Form validation and error handling
 
 ## Technologies
 
-### Frontend
-
 | Technology | Purpose |
-|------------|---------|
-| React | User interface |
+|---|---|
+| React | Frontend user interface |
 | Vite | Frontend development and build tooling |
-| JavaScript | Application logic |
-| CSS | Styling and responsive design |
+| FastAPI | Backend API |
+| Python | Backend programming language |
+| SQLAlchemy | Database ORM |
+| PostgreSQL | Relational database |
+| Alembic | Database migrations |
+| JWT | Access and refresh tokens |
+| `uv` | Python dependency and environment management |
+| `aiosmtplib` | SMTP email delivery |
+| Google OAuth | Google authentication |
+
+## Project Structure
+
+```text
+Project/
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── datamodels/
+│   │   ├── db/
+│   │   ├── models/
+│   │   ├── router/
+│   │   ├── services/
+│   │   └── main.py
+│   ├── migrations/
+│   ├── tests/
+│   ├── logs/
+│   ├── scripts/
+│   ├── .env.example
+│   ├── alembic.ini
+│   ├── pyproject.toml
+│   ├── requirements.txt
+│   └── uv.lock
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── hooks/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   ├── package.json
+│   └── vite.config.js
+├── .gitignore
+└── README.md
+```
+
+## Prerequisites
+
+- Python version supported by the backend project
+- Node.js and npm
+- PostgreSQL
+- `uv`
+- Google OAuth credentials if Google sign-in is required
+- SMTP credentials for email delivery
+
+## Configuration
 
 ### Backend
 
-| Technology | Purpose |
-|------------|---------|
-| Python | Backend programming language |
-| FastAPI | REST API framework |
-| SQLAlchemy | Database ORM |
-| SQLite | Database |
-| bcrypt | Password hashing |
-| aiosmtplib | SMTP email delivery |
+1. Open a terminal in the `backend` directory.
+2. Create a local `.env` file by copying `.env.example`.
+3. Configure the PostgreSQL connection, JWT settings, frontend URL, Google OAuth client ID, and SMTP settings using the variable names defined in `.env.example`.
+4. Install dependencies using `uv sync`.
 
-### Authentication & Services
+Never commit real credentials or secrets to Git.
 
-| Service | Purpose |
-|---------|---------|
-| Google OAuth | Google authentication |
-| SMTP | Password-reset emails |
+### Frontend
 
----
+Install the frontend dependencies:
 
-## Project Architecture
+```powershell
+cd frontend
+npm install
+```
 
-The application follows a simple full-stack architecture:
+Configure any frontend environment variables required by the application before running it.
 
-```text
-┌─────────────────────────┐
-│     React Frontend      │
-│                         │
-│  Login / Signup / Reset │
-└────────────┬────────────┘
-             │
-             │ HTTP Requests
-             ▼
-┌─────────────────────────┐
-│      FastAPI Backend    │
-│                         │
-│ Authentication API      │
-│ Password Reset API      │
-│ Google Authentication   │
-└────────────┬────────────┘
-             │
-       ┌─────┴─────┐
-       ▼           ▼
-┌────────────┐  ┌──────────────┐
-│   SQLite   │  │ SMTP / Email │
-│  Database  │  │   Service    │
-└────────────┘  └──────────────┘
+## Running the Application
 
+### Start the backend
 
-## Project Structure
-Project/
-│
-├── backend/
-│   ├── main.py
-│   ├── database.py
-│   ├── models.py
-│   ├── requirements.txt
-│   ├── .env.example
-│   └── .env
-│
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx
-│   │   ├── App.css
-│   │   └── ...
-│   ├── public/
-│   ├── package.json
-│   └── vite.config.js
-│
-├── .gitignore
-└── README.md
+From the project root:
+
+```powershell
+cd backend
+uv sync
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload
+```
+
+The API is available at `http://127.0.0.1:8000`.
+
+Interactive API documentation is available at `http://127.0.0.1:8000/docs`.
+
+### Start the frontend
+
+Open a second terminal:
+
+```powershell
+cd frontend
+npm run dev
+```
+
+Vite typically serves the frontend at `http://localhost:5173`.
+
+Ensure PostgreSQL is running and the backend configuration matches your local environment.
+
+## Database Migrations
+
+Apply migrations:
+
+```powershell
+cd backend
+uv run alembic upgrade head
+```
+
+Check whether model changes require new migrations:
+
+```powershell
+uv run alembic check
+```
+
+## Testing
+
+Run the backend tests:
+
+```powershell
+cd backend
+uv run pytest
+```
+
+Run the frontend production build and lint checks:
+
+```powershell
+cd frontend
+npm run build
+npm run lint
+```
+
+## Security Notes
+
+- Keep `.env` and real credentials out of version control.
+- Use HTTPS and secure cookie settings in production.
+- Keep access tokens short-lived and validate refresh tokens.
+- Configure allowed CORS origins for the deployment environment.
+- Protect Google OAuth and SMTP credentials.
+- Review production database permissions and logging configuration before deployment.
+
+## Development Status
+
+The application includes email/password authentication, email verification, Google sign-in, password recovery, JWT-based session management, and database migration support.
+
+This project is intended for development and evaluation. Production deployment requires environment-specific security configuration and review.
